@@ -120,8 +120,8 @@ Now, generate a section-wise structured summary of the document below:
  
 def summarize_text_with_langchain(text):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1200,
-        chunk_overlap=100
+        chunk_size=3000,
+        chunk_overlap=300
     )
     chunks = text_splitter.split_text(text)
     summaries = []
