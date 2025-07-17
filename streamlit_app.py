@@ -281,7 +281,64 @@ def parse_markdown_to_pdf_elements(text, styles):
         
         # Pattern 4: **Header Text** - Check if entire line is bold (most common pattern)
         # This pattern should catch lines that are entirely wrapped in **
-        bold_match = re.match(r'^\*\*(.*?)\*\*:?\s*
+        bold_match = re.match(r'^\*\*(.*?)\*\*:?\s*$', line)
+        if bold_match:
+            heading_text = bold_match.group(1).strip()
+            if heading_text:
+                # Determine if it's a main heading or subheading based on context
+                if ':' in line or len(heading_text.split()) <= 4:
+                    elements.append(Paragraph(heading_text, styles['heading']))
+                else:
+                    elements.append(Paragraph(heading_text, styles['subheading']))
+                continue
+        
+        # Pattern 5: Lines that look like headers (ALL CAPS or Title Case with colons)
+        if line.isupper() and len(line.split()) <= 8 and ':' in line:
+            elements.append(Paragraph(line, styles['heading']))
+            continue
+        
+        # Pattern 6: Title Case lines ending with colon (likely section headers)
+        if line.endswith(':') and line.istitle() and len(line.split()) <= 6:
+            elements.append(Paragraph(line, styles['subheading']))
+            continue
+        
+        # Pattern 7: Bullet points
+        if line.startswith('- ') or line.startswith('• '):
+            bullet_text = line[2:].strip()
+            # Check if bullet text has bold formatting
+            if '**' in bullet_text:
+                bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+            continue
+        
+        if line.startswith('* '):
+            bullet_text = line[2:].strip()
+            # Check if bullet text has bold formatting
+            if '**' in bullet_text:
+                bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+            continue
+        
+        # Pattern 8: Numbered lists
+        if re.match(r'^\d+\.\s', line):
+            list_text = re.sub(r'^\d+\.\s', '', line)
+            # Check if list text has bold formatting
+            if '**' in list_text:
+                list_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', list_text)
+            elements.append(Paragraph(f"• {list_text}", styles['bullet']))
+            continue
+        
+        # Pattern 9: Check for inline bold formatting within normal text
+        if '**' in line:
+            # Handle inline bold text within paragraphs
+            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+            elements.append(Paragraph(formatted_line, styles['normal']))
+            continue
+        
+        # Pattern 10: Regular text
+        elements.append(Paragraph(line, styles['normal']))
+    
+    return elements
 
 def generate_pdf(summary_text):
     buffer = BytesIO()
