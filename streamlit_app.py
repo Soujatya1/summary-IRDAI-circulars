@@ -200,7 +200,7 @@ def create_pdf_styles():
         spaceAfter=5,
         alignment=TA_LEFT,
         textColor='black',
-        fontName='TimesNewRoman'
+        fontName='Helvetica-Bold'
     )
     
     minor_heading_style = ParagraphStyle(
@@ -211,7 +211,7 @@ def create_pdf_styles():
         spaceAfter=4,
         alignment=TA_LEFT,
         textColor='black',
-        fontName='TimesNewRoman'
+        fontName='Helvetica-Bold'
     )
     
     normal_style = ParagraphStyle(
