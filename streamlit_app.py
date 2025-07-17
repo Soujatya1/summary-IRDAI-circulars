@@ -1,151 +1,161 @@
 import streamlit as st
-import pandas as pd
-import math
-from pathlib import Path
+import pdfplumber
+import os
+from dotenv import load_dotenv
+from langchain_openai import AzureChatOpenAI
+from langchain.schema import HumanMessage
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langdetect import detect
+from docx import Document
+from io import BytesIO
+ 
+# Initialize LLM
+llm = AzureChatOpenAI(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            deployment_name=deployment_name,
+            api_version=api_version,
+            temperature=0.3
+        )
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
-
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
-
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+with st.sidebar:
+    st.header("🔧 Configuration")
+    
+    # Azure OpenAI Configuration
+    azure_endpoint = st.text_input(
+        "Azure OpenAI Endpoint",
+        placeholder="https://your-resource.openai.azure.com/",
+        help="Your Azure OpenAI service endpoint"
+    )
+    
+    api_key = st.text_input(
+        "Azure OpenAI API Key",
+        type="password",
+        placeholder="Enter your API key",
+        help="Your Azure OpenAI API key"
+    )
+    
+    deployment_name = st.text_input(
+        "Deployment Name",
+        placeholder="gpt-35-turbo",
+        help="Name of your deployed model"
+    )
+    
+    api_version = st.selectbox(
+        "API Version",
+        ["2025-01-01-preview"],
+        index=0
     )
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+# Streamlit UI
+st.set_page_config(layout="wide")
+ 
+uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
+ 
+def is_english(text):
+    try:
+        return detect(text.strip()) == "en"
+    except:
+        return False
 
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+def get_summary_prompt(text):
+    return f"""
+You are a domain expert in insurance compliance and regulation.
+ 
+Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+ 
+---
+ 
+### Mandatory Summarization Rules:
+ 
+1. **Follow the original structure strictly** — maintain the same order of:
+   - Section headings
+   - Subheadings
+   - Bullet points
+   - Tables
+   - Date-wise event history
+   - UIDAI / IRDAI / eGazette circulars
+ 
+2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
+ 
+3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
+   - Keep it brief, but **do not omit the core message**.
+   - Avoid generalizations or overly descriptive rewriting.
+ 
+4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
+ 
+5. If the section contains **tabular data**, preserve **column-wise details**:
+   - Include every row and column in a concise bullet or structured format.
+   - Do not merge or generalize rows — maintain data fidelity.
+ 
+6. If a section contains **violations, fines, or penalties**, mention each item clearly:
+   - List out exact violation titles and actions taken or proposed.
+ 
+7. For **date-wise circulars or history**, ensure that:
+   - **No dates are skipped or merged.**
+   - Maintain **chronological order**.
+   - Mention full references such as "IRDAI Circular dated 12-May-2022".
+ 
+---
+ 
+### Output Format:
+ 
+- Follow the exact **order and structure** of the input file.
+- Do **not invent new headings** or sections.
+- Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
+ 
+---
+ 
+Now, generate a section-wise structured summary of the document below:
+--------------------
+{text}
+"""
+ 
+def summarize_text_with_langchain(text):
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1200,
+        chunk_overlap=100
+    )
+    chunks = text_splitter.split_text(text)
+    summaries = []
+ 
+    for i, chunk in enumerate(chunks, 1):
+        prompt = get_summary_prompt(chunk, i)
+        response = llm([HumanMessage(content=prompt)])
+        summaries.append(response.content.strip())
+ 
+    return "\n\n".join(summaries)
+ 
+def generate_docx(summary_text):
+    doc = Document()
+    doc.add_heading("Summary", level=1)
+    for para in summary_text.split("\n\n"):
+        doc.add_paragraph(para.strip())
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+ 
+if uploaded_file:
+    st.success("File uploaded successfully!")
+    english_text = ""
+ 
+    with pdfplumber.open(uploaded_file) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if text and is_english(text):
+                english_text += f"\n\n--- Page {i} ---\n{text}"
+            else:
+                st.warning(f"Skipping non-English Page {i}")
+ 
+    if english_text.strip():
+        with st.spinner("Summarizing English content..."):
+            full_summary = summarize_text_with_langchain(english_text)
+ 
+        st.subheader("Summary")
+        st.text_area("Preview", full_summary, height=500)
+ 
+        docx_file = generate_docx(full_summary)
+        st.download_button("Download Summary (DOCX)", data=docx_file, file_name="Summary.docx")
+    else:
+        st.error("No English content found in the uploaded PDF.")
