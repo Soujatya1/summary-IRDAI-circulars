@@ -172,7 +172,7 @@ if uploaded_file:
     with pdfplumber.open(uploaded_file) as pdf:
         for i, page in enumerate(pdf.pages, 1):
             text = page.extract_text()
-            if text and extract_english_text(text):
+            if extract_english_text(text):
                 english_text += f"\n\n--- Page {i} ---\n{text}"
             else:
                 st.warning(f"Skipping non-English Page {i}")
