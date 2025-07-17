@@ -159,7 +159,7 @@ if uploaded_file:
                 sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
                 english_sentences = [s for s in sentences if is_english(s)]
                 if english_sentences:
-                    english_text += f"\n\n--- Page {i} ---\n" + ".".join(english_sentences) + "."
+                    english_text += english_sentences + "."
                 else:
                     st.warning(f"Skipping non-English Page {i}")
  
