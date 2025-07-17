@@ -92,7 +92,7 @@ def extract_english_text(text):
             r'^Page\s+\d+',
             r'^www\.',
             r'@\w+\.(com|org|gov|in)',
-            r'^[A-Z\s]{10,}
+            r'^[A-Z\s]{10,}'
         ]
         
         for sentence in sentences:
