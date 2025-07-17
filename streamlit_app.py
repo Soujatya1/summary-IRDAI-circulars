@@ -8,6 +8,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
 from docx import Document
 from io import BytesIO
+from langdetect.lang_detect_exception import LangDetectException
 
 with st.sidebar:
     st.header("🔧 Configuration")
@@ -59,12 +60,27 @@ st.set_page_config(layout="wide")
  
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
  
-def is_english(text):
+def extract_english_text(text):
     try:
-        english_text = detect(text.strip()) == "en"
-        st.write(english_text)
-    except:
-        return False
+        sentences = re.split(r'[.!?]+', text)
+        english_sentences = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) > 10:
+                try:
+                    lang = langdetect.detect(sentence)
+                    if lang == 'en':
+                        english_sentences.append(sentence)
+                except LangDetectException:
+                    if re.search(r'\b(the|and|or|of|to|in|for|with|by|from|at|is|are|was|were)\b', sentence.lower()):
+                        english_sentences.append(sentence)
+        
+        return'. '.join(english_sentences) + '.'
+    
+    except Exception as e:
+        st.warning(f"Language detection error: {e}. Using original text.")
+        return text
 
 def get_summary_prompt(text):
     return f"""
@@ -151,7 +167,7 @@ if uploaded_file:
     with pdfplumber.open(uploaded_file) as pdf:
         for i, page in enumerate(pdf.pages, 1):
             text = page.extract_text()
-            if text and is_english(text):
+            if text and extract_english_text(text):
                 english_text += f"\n\n--- Page {i} ---\n{text}"
             else:
                 st.warning(f"Skipping non-English Page {i}")
