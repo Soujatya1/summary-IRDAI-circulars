@@ -61,7 +61,8 @@ uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
  
 def is_english(text):
     try:
-        return detect(text.strip()) == "en"
+        english_text = detect(text.strip()) == "en"
+        st.write(english_text)
     except:
         return False
 
