@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langdetect import detect
+import langdetect
 from docx import Document
 from io import BytesIO
 from langdetect.lang_detect_exception import LangDetectException
