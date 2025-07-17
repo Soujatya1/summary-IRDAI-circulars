@@ -77,7 +77,7 @@ def extract_english_text(text):
         
         for sentence in sentences:
             sentence = sentence.strip()
-            if len(sentence) > 50:
+            if len(sentence) > 10:
                 try:
                     lang = langdetect.detect(sentence)
                     if lang == 'en':
@@ -110,6 +110,7 @@ Your task is to generate a **clean, concise, section-wise summary** of the input
    - Tables
    - Date-wise event history
    - UIDAI / IRDAI / eGazette circulars
+   - Avoid blank section headers to be published
  
 2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
  
