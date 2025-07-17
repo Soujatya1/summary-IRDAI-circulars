@@ -200,7 +200,7 @@ def create_pdf_styles():
         spaceAfter=5,
         alignment=TA_LEFT,
         textColor='black',
-        fontName='TimesNewRomanPSMT'
+        fontName='TimesNewRoman'
     )
     
     minor_heading_style = ParagraphStyle(
