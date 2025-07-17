@@ -8,15 +8,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
 from docx import Document
 from io import BytesIO
- 
-# Initialize LLM
-llm = AzureChatOpenAI(
-            azure_endpoint=endpoint,
-            api_key=api_key,
-            deployment_name=deployment_name,
-            api_version=api_version,
-            temperature=0.3
-        )
 
 with st.sidebar:
     st.header("🔧 Configuration")
@@ -46,6 +37,22 @@ with st.sidebar:
         ["2025-01-01-preview"],
         index=0
     )
+
+def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
+    try:
+        llm = AzureChatOpenAI(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            deployment_name=deployment_name,
+            api_version=api_version,
+            temperature=0.3
+        )
+        return llm
+    except Exception as e:
+        st.error(f"Error initializing Azure OpenAI: {str(e)}")
+        return None
+
+llm = initialize_azure_openai(endpoint, api_key, deployment_name, api_version)
 
 # Streamlit UI
 st.set_page_config(layout="wide")
