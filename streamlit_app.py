@@ -52,7 +52,7 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
         st.error(f"Error initializing Azure OpenAI: {str(e)}")
         return None
 
-llm = initialize_azure_openai(endpoint, api_key, deployment_name, api_version)
+llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
 
 # Streamlit UI
 st.set_page_config(layout="wide")
