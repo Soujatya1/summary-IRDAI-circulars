@@ -1,2 +1,6 @@
 streamlit
-pandas
+pdfplumber
+langchain-openai
+langchain
+langchain-community
+langdetect
