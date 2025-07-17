@@ -175,8 +175,7 @@ def create_pdf_styles():
         fontSize=18,
         spaceAfter=20,
         alignment=TA_CENTER,
-        textColor='black',
-        fontName='Helvetica-Bold'
+        textColor='black'
     )
     
     heading_style = ParagraphStyle(
@@ -186,8 +185,7 @@ def create_pdf_styles():
         spaceBefore=12,
         spaceAfter=6,
         alignment=TA_LEFT,
-        textColor='black',
-        fontName='Helvetica-Bold'
+        textColor='black'
     )
     
     subheading_style = ParagraphStyle(
@@ -197,8 +195,7 @@ def create_pdf_styles():
         spaceBefore=8,
         spaceAfter=4,
         alignment=TA_LEFT,
-        textColor='black',
-        fontName='Helvetica-Bold'
+        textColor='black'
     )
     
     normal_style = ParagraphStyle(
@@ -208,8 +205,7 @@ def create_pdf_styles():
         spaceBefore=3,
         spaceAfter=3,
         alignment=TA_JUSTIFY,
-        textColor='black',
-        fontName='Helvetica'
+        textColor='black'
     )
     
     bullet_style = ParagraphStyle(
@@ -220,8 +216,7 @@ def create_pdf_styles():
         spaceAfter=2,
         leftIndent=20,
         alignment=TA_JUSTIFY,
-        textColor='black',
-        fontName='Helvetica'
+        textColor='black'
     )
     
     return {
@@ -242,52 +237,25 @@ def parse_markdown_to_pdf_elements(text, styles):
             elements.append(Spacer(1, 6))
             continue
         
-        # Handle headers first (with or without markdown bold syntax)
-        if line.startswith('####'):
-            heading_text = line[4:].strip()
-            # Remove any markdown bold syntax from headers
-            heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
-            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['subheading']))
+        if line.startswith('**') and line.endswith('**'):
+            heading_text = line[2:-2].strip()
+            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
         elif line.startswith('###'):
             heading_text = line[3:].strip()
-            heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['subheading']))
         elif line.startswith('##'):
             heading_text = line[2:].strip()
-            heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
         elif line.startswith('#'):
             heading_text = line[1:].strip()
-            heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
-        # Handle standalone bold text (likely section headers)
-        elif line.startswith('**') and line.endswith('**') and line.count('**') == 2:
-            heading_text = line[2:-2].strip()
-            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
-        # Handle bullet points
         elif line.startswith('- ') or line.startswith('• '):
             bullet_text = line[2:].strip()
-            # Convert markdown bold to HTML bold in bullet points
-            bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
         elif line.startswith('* '):
             bullet_text = line[2:].strip()
-            bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-        # Handle numbered lists
-        elif re.match(r'^\d+\.', line):
-            # Extract number and text
-            match = re.match(r'^(\d+)\.\s*(.*)', line)
-            if match:
-                number, text = match.groups()
-                text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-                elements.append(Paragraph(f"{number}. {text}", styles['bullet']))
-            else:
-                formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
-                elements.append(Paragraph(formatted_line, styles['normal']))
-        # Handle regular text with potential bold formatting
         else:
-            # Convert markdown bold to HTML bold for regular text
             formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
             elements.append(Paragraph(formatted_line, styles['normal']))
     
@@ -308,9 +276,6 @@ def generate_pdf(summary_text):
     
     story = []
     
-    story.append(Paragraph("<b>Document Summary</b>", styles['title']))
-    story.append(Spacer(1, 20))
-    
     elements = parse_markdown_to_pdf_elements(summary_text, styles)
     story.extend(elements)
     
@@ -325,6 +290,10 @@ def clean_extracted_text(text):
     text = re.sub(r'\n{3,}', '\n\n', text)
     
     return text.strip()
+
+def generate_download_filename(original_filename):
+    name_without_ext = os.path.splitext(original_filename)[0]
+    return f"{name_without_ext}_summary.pdf"
 
 if uploaded_file:
     st.success("File uploaded successfully!")
@@ -351,10 +320,13 @@ if uploaded_file:
         st.text_area("Preview", full_summary, height=500)
         
         pdf_file = generate_pdf(full_summary)
+        
+        download_filename = generate_download_filename(uploaded_file.name)
+        
         st.download_button(
             "Download Summary (PDF)", 
             data=pdf_file, 
-            file_name="Summary.pdf",
+            file_name=download_filename,
             mime="application/pdf"
         )
     else:
