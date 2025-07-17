@@ -125,7 +125,7 @@ You are a domain expert in insurance compliance and regulation. Your task is to 
 
 4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
 
-5. If the section contains **tabular data**, convert them into bullet pointers:
+5. If the section contains **tabular data**, preserve **column-wise details**:
    - Include every row and column in a concise bullet or structured format.
    - Do not merge or generalize rows — maintain data fidelity.
 
