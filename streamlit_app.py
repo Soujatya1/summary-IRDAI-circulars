@@ -45,7 +45,7 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
             api_key=api_key,
             deployment_name=deployment_name,
             api_version=api_version,
-            temperature=0.3
+            temperature=0.1
         )
         return llm
     except Exception as e:
