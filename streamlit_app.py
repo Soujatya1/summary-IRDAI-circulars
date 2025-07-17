@@ -125,7 +125,7 @@ You are a domain expert in insurance compliance and regulation. Your task is to 
 
 4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
 
-5. If the section contains **tabular data**, preserve **column-wise details**:
+5. If the section contains **tabular data**, convert them into bullet pointers:
    - Include every row and column in a concise bullet or structured format.
    - Do not merge or generalize rows — maintain data fidelity.
 
@@ -179,6 +179,15 @@ def generate_docx(summary_text):
     buffer.seek(0)
     return buffer
 
+def clean_extracted_text(text):
+    """Remove page markers and clean up the text"""
+    text = re.sub(r'\n\n--- Page \d+ ---\n', '\n\n', text)
+    text = re.sub(r'--- Page \d+ ---', '', text)
+    
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
 if uploaded_file:
     st.success("File uploaded successfully!")
     english_text = ""
@@ -196,6 +205,7 @@ if uploaded_file:
                     st.warning(f"Skipping non-English Page {i}")
     
     if english_text.strip():
+        english_text = clean_extracted_text(english_text)
         with st.spinner("Summarizing English content..."):
             full_summary = summarize_text_with_langchain(english_text)
         
