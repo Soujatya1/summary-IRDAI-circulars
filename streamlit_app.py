@@ -1,7 +1,6 @@
 import streamlit as st
 import pdfplumber
 import os
-from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
