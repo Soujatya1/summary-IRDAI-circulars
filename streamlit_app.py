@@ -77,7 +77,7 @@ def extract_english_text(text):
         
         for sentence in sentences:
             sentence = sentence.strip()
-            if len(sentence) > 10:
+            if len(sentence) > 15:
                 try:
                     lang = langdetect.detect(sentence)
                     if lang == 'en':
