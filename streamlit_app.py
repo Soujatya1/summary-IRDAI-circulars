@@ -102,7 +102,7 @@ def is_english(text):
 
 def get_summary_prompt(text):
     return f"""
-You are a domain expert in insurance compliance and regulation. Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+You are a domain expert in insurance compliance and regulation. Your task is to generate a **clean, concise, section-wise summary** of the input document while preserving the **original structure and flow** of the document.
 
 ---
 
@@ -138,10 +138,20 @@ You are a domain expert in insurance compliance and regulation. Your task is to 
 
 ---
 
+### Formatting Guidelines:
+- Use **bold** only for main headings and subheadings
+- Use bullet points (•) for lists
+- Do NOT bold entire paragraphs or sentences that are not headings
+- Maintain proper paragraph structure
+- Use numbered headings like "1. Definitions:" when present in original
+
+---
+
 ### Output Format:
 - Follow the exact **order and structure** of the input file.
 - Do **not invent new headings** or sections.
-- Please return headers and sub-headers in bold
+- Please return headers and sub-headers in bold format using **text**
+- Regular content should be in normal text without bold formatting
 
 ---
 
@@ -154,7 +164,9 @@ Now, generate a section-wise structured summary of the document below:
 def summarize_text_with_langchain(text):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=3500,
-        chunk_overlap=100
+        chunk_overlap=200,
+        separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""],
+        keep_separator=True
     )
     chunks = text_splitter.split_text(text)
     summaries = []
@@ -162,9 +174,22 @@ def summarize_text_with_langchain(text):
     for i, chunk in enumerate(chunks, 1):
         prompt = get_summary_prompt(chunk)
         response = llm([HumanMessage(content=prompt)])
-        summaries.append(response.content.strip())
+        summary = response.content.strip()
+        
+        # Clean up any formatting issues in the summary
+        summary = re.sub(r'\*\*\s*\*\*', '', summary)  # Remove empty bold tags
+        summary = re.sub(r'\n{3,}', '\n\n', summary)  # Normalize line breaks
+        
+        summaries.append(summary)
     
-    return "\n\n".join(summaries)
+    # Join summaries and do final cleanup
+    full_summary = "\n\n".join(summaries)
+    
+    # Post-process to fix any remaining formatting issues
+    full_summary = re.sub(r'\*\*([^*]+)\*\*\s*\*\*([^*]+)\*\*', r'**\1 \2**', full_summary)  # Merge adjacent bold
+    full_summary = re.sub(r'\n{3,}', '\n\n', full_summary)  # Normalize line breaks
+    
+    return full_summary
 
 def create_pdf_styles():
     styles = getSampleStyleSheet()
@@ -237,9 +262,14 @@ def parse_markdown_to_pdf_elements(text, styles):
             elements.append(Spacer(1, 6))
             continue
         
-        if line.startswith('**') and line.endswith('**'):
+        # Check for numbered headings (e.g., "1. Definitions:")
+        if re.match(r'^\d+\.\s+.*:', line):
+            elements.append(Paragraph(f"<b>{line}</b>", styles['heading']))
+        # Check for lines that start and end with ** (full line bold)
+        elif line.startswith('**') and line.endswith('**') and line.count('**') == 2:
             heading_text = line[2:-2].strip()
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
+        # Check for markdown headers
         elif line.startswith('###'):
             heading_text = line[3:].strip()
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['subheading']))
@@ -249,13 +279,19 @@ def parse_markdown_to_pdf_elements(text, styles):
         elif line.startswith('#'):
             heading_text = line[1:].strip()
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
+        # Check for bullet points
         elif line.startswith('- ') or line.startswith('• '):
             bullet_text = line[2:].strip()
-            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+            # Handle inline bold formatting within bullet points
+            formatted_bullet = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+            elements.append(Paragraph(f"• {formatted_bullet}", styles['bullet']))
         elif line.startswith('* '):
             bullet_text = line[2:].strip()
-            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+            formatted_bullet = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+            elements.append(Paragraph(f"• {formatted_bullet}", styles['bullet']))
+        # Regular text with inline formatting
         else:
+            # Handle inline bold formatting more carefully
             formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
             elements.append(Paragraph(formatted_line, styles['normal']))
     
@@ -276,6 +312,9 @@ def generate_pdf(summary_text):
     
     story = []
     
+    story.append(Paragraph("<b>Document Summary</b>", styles['title']))
+    story.append(Spacer(1, 20))
+    
     elements = parse_markdown_to_pdf_elements(summary_text, styles)
     story.extend(elements)
     
@@ -292,7 +331,10 @@ def clean_extracted_text(text):
     return text.strip()
 
 def generate_download_filename(original_filename):
+    """Generate a download filename based on the original filename"""
+    # Remove the .pdf extension if present
     name_without_ext = os.path.splitext(original_filename)[0]
+    # Add _summary suffix and .pdf extension
     return f"{name_without_ext}_summary.pdf"
 
 if uploaded_file:
@@ -321,6 +363,7 @@ if uploaded_file:
         
         pdf_file = generate_pdf(full_summary)
         
+        # Generate download filename based on source document name
         download_filename = generate_download_filename(uploaded_file.name)
         
         st.download_button(
