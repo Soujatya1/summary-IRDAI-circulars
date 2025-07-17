@@ -211,7 +211,7 @@ def create_pdf_styles():
         spaceAfter=4,
         alignment=TA_LEFT,
         textColor='black',
-        fontName='TimesNewRomanPSMT'
+        fontName='TimesNewRoman'
     )
     
     normal_style = ParagraphStyle(
