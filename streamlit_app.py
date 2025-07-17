@@ -102,7 +102,7 @@ def is_english(text):
 
 def get_summary_prompt(text):
     return f"""
-You are a domain expert in insurance compliance and regulation. Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+You are a domain expert in insurance compliance and regulation. Your task is to generate a **clean, concise, section-wise summary** of the input document while preserving the **original structure and flow** of the document.
 
 ---
 
@@ -141,7 +141,9 @@ You are a domain expert in insurance compliance and regulation. Your task is to 
 ### Output Format:
 - Follow the exact **order and structure** of the input file.
 - Do **not invent new headings** or sections.
-- Please return headers and sub-headers in bold
+- Format headers and sub-headers using markdown **bold** syntax: **Header Text**
+- Use bullet points with proper indentation for sub-items
+- Maintain clear hierarchy with consistent formatting
 
 ---
 
@@ -178,6 +180,7 @@ def create_pdf_styles():
         textColor='black'
     )
     
+    # Main heading style (for **text** patterns)
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading1'],
@@ -185,17 +188,32 @@ def create_pdf_styles():
         spaceBefore=12,
         spaceAfter=6,
         alignment=TA_LEFT,
-        textColor='black'
+        textColor='black',
+        fontName='Helvetica-Bold'
     )
     
+    # Subheading style (for ### patterns)
     subheading_style = ParagraphStyle(
         'CustomSubHeading',
         parent=styles['Heading2'],
         fontSize=12,
+        spaceBefore=10,
+        spaceAfter=5,
+        alignment=TA_LEFT,
+        textColor='black',
+        fontName='Helvetica-Bold'
+    )
+    
+    # Minor heading style (for ## patterns)
+    minor_heading_style = ParagraphStyle(
+        'CustomMinorHeading',
+        parent=styles['Heading3'],
+        fontSize=11,
         spaceBefore=8,
         spaceAfter=4,
         alignment=TA_LEFT,
-        textColor='black'
+        textColor='black',
+        fontName='Helvetica-Bold'
     )
     
     normal_style = ParagraphStyle(
@@ -223,6 +241,7 @@ def create_pdf_styles():
         'title': title_style,
         'heading': heading_style,
         'subheading': subheading_style,
+        'minor_heading': minor_heading_style,
         'normal': normal_style,
         'bullet': bullet_style
     }
@@ -237,27 +256,72 @@ def parse_markdown_to_pdf_elements(text, styles):
             elements.append(Spacer(1, 6))
             continue
         
-        if line.startswith('**') and line.endswith('**'):
+        # Check for different header patterns in order of priority
+        
+        # Pattern 1: **Header Text** (most common from your prompt)
+        if line.startswith('**') and line.endswith('**') and len(line) > 4:
             heading_text = line[2:-2].strip()
-            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
-        elif line.startswith('###'):
+            if heading_text:  # Make sure it's not empty
+                elements.append(Paragraph(heading_text, styles['heading']))
+                continue
+        
+        # Pattern 2: ### Header (markdown h3)
+        if line.startswith('###'):
             heading_text = line[3:].strip()
-            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['subheading']))
-        elif line.startswith('##'):
+            if heading_text:
+                elements.append(Paragraph(heading_text, styles['subheading']))
+                continue
+        
+        # Pattern 3: ## Header (markdown h2)
+        if line.startswith('##'):
             heading_text = line[2:].strip()
-            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
-        elif line.startswith('#'):
+            if heading_text:
+                elements.append(Paragraph(heading_text, styles['minor_heading']))
+                continue
+        
+        # Pattern 4: # Header (markdown h1)
+        if line.startswith('#'):
             heading_text = line[1:].strip()
-            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
-        elif line.startswith('- ') or line.startswith('• '):
+            if heading_text:
+                elements.append(Paragraph(heading_text, styles['heading']))
+                continue
+        
+        # Pattern 5: Lines that look like headers (ALL CAPS or Title Case with colons)
+        if line.isupper() and len(line.split()) <= 8 and ':' in line:
+            elements.append(Paragraph(line, styles['heading']))
+            continue
+        
+        # Pattern 6: Title Case lines ending with colon (likely section headers)
+        if line.endswith(':') and line.istitle() and len(line.split()) <= 6:
+            elements.append(Paragraph(line, styles['subheading']))
+            continue
+        
+        # Pattern 7: Bullet points
+        if line.startswith('- ') or line.startswith('• '):
             bullet_text = line[2:].strip()
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-        elif line.startswith('* '):
+            continue
+        
+        if line.startswith('* '):
             bullet_text = line[2:].strip()
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-        else:
+            continue
+        
+        # Pattern 8: Numbered lists
+        if re.match(r'^\d+\.\s', line):
+            list_text = re.sub(r'^\d+\.\s', '', line)
+            elements.append(Paragraph(f"• {list_text}", styles['bullet']))
+            continue
+        
+        # Pattern 9: Check for inline bold formatting within normal text
+        if '**' in line:
+            # Handle inline bold text within paragraphs
             formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
             elements.append(Paragraph(formatted_line, styles['normal']))
+            continue
+        
+        # Pattern 10: Regular text
+        elements.append(Paragraph(line, styles['normal']))
     
     return elements
 
@@ -275,6 +339,10 @@ def generate_pdf(summary_text):
     styles = create_pdf_styles()
     
     story = []
+    
+    # Add title
+    story.append(Paragraph("Document Summary", styles['title']))
+    story.append(Spacer(1, 20))
     
     elements = parse_markdown_to_pdf_elements(summary_text, styles)
     story.extend(elements)
