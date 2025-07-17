@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 with st.sidebar:
     st.header("🔧 Configuration")
     
-    # Azure OpenAI Configuration
     azure_endpoint = st.text_input(
         "Azure OpenAI Endpoint",
         placeholder="https://your-resource.openai.azure.com/",
@@ -69,10 +68,8 @@ st.set_page_config(layout="wide")
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
 def is_footer_or_header(text):
-    """Check if text is likely a footer or header that should be excluded"""
     text = text.strip().upper()
     
-    # Common footer/header patterns
     footer_patterns = [
         r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC',
         r'^\d+\s+THE GAZETTE OF INDIA',
@@ -80,18 +77,16 @@ def is_footer_or_header(text):
         r'EXTRAORDINARY.*PART.*III',
         r'^\d+\s+.*GAZETTE.*INDIA',
         r'PAGE\s+\d+',
-        r'^\d+\s*$',  # Just page numbers
-        r'^[IVX]+\s*$',  # Roman numerals alone
+        r'^\d+\s*$',
+        r'^[IVX]+\s*$',
         r'CONTINUED\s+ON\s+NEXT\s+PAGE',
-        r'^\d+\s+OF\s+\d+$',  # Page x of y
+        r'^\d+\s+OF\s+\d+$',
     ]
     
-    # Check against patterns
     for pattern in footer_patterns:
         if re.search(pattern, text):
             return True
     
-    # Check for very short lines that are likely headers/footers
     if len(text.split()) <= 2 and any(word in text for word in ['GAZETTE', 'INDIA', 'PART', 'SEC']):
         return True
     
@@ -99,7 +94,6 @@ def is_footer_or_header(text):
 
 def is_english(text):
     try:
-        # First check if it's a footer/header to exclude
         if is_footer_or_header(text):
             return False
         return detect(text.strip()) == "en"
@@ -173,10 +167,8 @@ def summarize_text_with_langchain(text):
     return "\n\n".join(summaries)
 
 def create_pdf_styles():
-    """Create custom styles for PDF formatting"""
     styles = getSampleStyleSheet()
     
-    # Title style
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Title'],
@@ -186,7 +178,6 @@ def create_pdf_styles():
         textColor='black'
     )
     
-    # Main heading style (for **text**)
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading1'],
@@ -197,7 +188,6 @@ def create_pdf_styles():
         textColor='black'
     )
     
-    # Sub-heading style
     subheading_style = ParagraphStyle(
         'CustomSubHeading',
         parent=styles['Heading2'],
@@ -208,7 +198,6 @@ def create_pdf_styles():
         textColor='black'
     )
     
-    # Normal text style
     normal_style = ParagraphStyle(
         'CustomNormal',
         parent=styles['Normal'],
@@ -219,7 +208,6 @@ def create_pdf_styles():
         textColor='black'
     )
     
-    # Bullet point style
     bullet_style = ParagraphStyle(
         'CustomBullet',
         parent=styles['Normal'],
@@ -240,7 +228,6 @@ def create_pdf_styles():
     }
 
 def parse_markdown_to_pdf_elements(text, styles):
-    """Parse markdown-style text and convert to PDF elements"""
     elements = []
     lines = text.split('\n')
     
@@ -250,41 +237,31 @@ def parse_markdown_to_pdf_elements(text, styles):
             elements.append(Spacer(1, 6))
             continue
         
-        # Check for different heading levels
         if line.startswith('**') and line.endswith('**'):
-            # Main heading
             heading_text = line[2:-2].strip()
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
         elif line.startswith('###'):
-            # Sub-heading level 3
             heading_text = line[3:].strip()
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['subheading']))
         elif line.startswith('##'):
-            # Sub-heading level 2
             heading_text = line[2:].strip()
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
         elif line.startswith('#'):
-            # Main heading
             heading_text = line[1:].strip()
             elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
         elif line.startswith('- ') or line.startswith('• '):
-            # Bullet point
             bullet_text = line[2:].strip()
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
         elif line.startswith('* '):
-            # Bullet point
             bullet_text = line[2:].strip()
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
         else:
-            # Regular paragraph - handle inline bold formatting
-            # Convert **text** to <b>text</b>
             formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
             elements.append(Paragraph(formatted_line, styles['normal']))
     
     return elements
 
 def generate_pdf(summary_text):
-    """Generate PDF with proper formatting"""
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -295,27 +272,21 @@ def generate_pdf(summary_text):
         bottomMargin=72
     )
     
-    # Create styles
     styles = create_pdf_styles()
     
-    # Build story
     story = []
     
-    # Add title
     story.append(Paragraph("<b>Document Summary</b>", styles['title']))
     story.append(Spacer(1, 20))
     
-    # Parse and add content
     elements = parse_markdown_to_pdf_elements(summary_text, styles)
     story.extend(elements)
     
-    # Build PDF
     doc.build(story)
     buffer.seek(0)
     return buffer
 
 def clean_extracted_text(text):
-    """Remove page markers and clean up the text"""
     text = re.sub(r'\n\n--- Page \d+ ---\n', '\n\n', text)
     text = re.sub(r'--- Page \d+ ---', '', text)
     
@@ -347,7 +318,6 @@ if uploaded_file:
         st.subheader("Summary")
         st.text_area("Preview", full_summary, height=500)
         
-        # Generate PDF instead of DOCX
         pdf_file = generate_pdf(full_summary)
         st.download_button(
             "Download Summary (PDF)", 
