@@ -6,6 +6,8 @@ from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
+from langdetect.lang_detect_exception import LangDetectException
+import langdetect
 from docx import Document
 from io import BytesIO
 import re
@@ -63,12 +65,33 @@ llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_vers
 st.set_page_config(layout="wide")
  
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
- 
-def is_english(text):
+
+def extract_english_text(text):
+    """
+    Enhanced function to extract English text from mixed language content.
+    Uses langdetect library with fallback to keyword-based detection.
+    """
     try:
-        return detect(text.strip()) == "en"
-    except:
-        return False
+        sentences = re.split(r'[.!?]+', text)
+        english_sentences = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) > 10:
+                try:
+                    lang = langdetect.detect(sentence)
+                    if lang == 'en':
+                        english_sentences.append(sentence)
+                except LangDetectException:
+                    # Fallback: keyword-based detection for English
+                    if re.search(r'\b(the|and|or|of|to|in|for|with|by|from|at|is|are|was|were)\b', sentence.lower()):
+                        english_sentences.append(sentence)
+        
+        return '. '.join(english_sentences) + '.' if english_sentences else ""
+    
+    except Exception as e:
+        st.warning(f"Language detection error: {e}. Using original text.")
+        return text
 
 def get_summary_prompt(text):
     return f"""
@@ -156,10 +179,10 @@ if uploaded_file:
         for i, page in enumerate(pdf.pages, 1):
             text = page.extract_text()
             if text:
-                sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
-                english_sentences = [s for s in sentences if is_english(s)]
-                if english_sentences:
-                    english_text += ".".join(english_sentences) + "."
+                # Use the enhanced extract_english_text function
+                english_content = extract_english_text(text)
+                if english_content.strip():
+                    english_text += f"\n\n--- Page {i} ---\n" + english_content
                 else:
                     st.warning(f"Skipping non-English Page {i}")
  
