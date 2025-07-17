@@ -9,6 +9,7 @@ from langdetect import detect
 from docx import Document
 from io import BytesIO
 from langdetect.lang_detect_exception import LangDetectException
+import re
 
 with st.sidebar:
     st.header("🔧 Configuration")
