@@ -5,10 +5,9 @@ from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import langdetect
+from langdetect import detect
 from docx import Document
 from io import BytesIO
-from langdetect.lang_detect_exception import LangDetectException
 import re
 import logging
 
@@ -65,27 +64,11 @@ st.set_page_config(layout="wide")
  
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
  
-def extract_english_text(text):
+def is_english(text):
     try:
-        sentences = re.split(r'[.!?]+', text)
-        english_sentences = []
-        
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if len(sentence) > 10:
-                try:
-                    lang = langdetect.detect(sentence)
-                    if lang == 'en':
-                        english_sentences.append(sentence)
-                except LangDetectException:
-                    if re.search(r'\b(the|and|or|of|to|in|for|with|by|from|at|is|are|was|were)\b', sentence.lower()):
-                        english_sentences.append(sentence)
-        
-        return '. '.join(english_sentences) + '.'
-    
-    except Exception as e:
-        st.warning(f"Language detection error: {e}. Using original text.")
-        return text
+        return detect(text.strip()) == "en"
+    except:
+        return False
 
 def get_summary_prompt(text):
     return f"""
@@ -172,10 +155,13 @@ if uploaded_file:
     with pdfplumber.open(uploaded_file) as pdf:
         for i, page in enumerate(pdf.pages, 1):
             text = page.extract_text()
-            if extract_english_text(text):
-                english_text += f"\n\n--- Page {i} ---\n{text}"
-            else:
-                st.warning(f"Skipping non-English Page {i}")
+            if text:
+                sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
+                english_sentences = [s for s in sentences if is_english(s)]
+                if english_sentences:
+                    english_text += f"\n\n--- Page {i} ---\n" + ".".join(englis_sentences) + "."
+                else:
+                    st.warning(f"Skipping non-English Page {i}")
  
     if english_text.strip():
         with st.spinner("Summarizing English content..."):
