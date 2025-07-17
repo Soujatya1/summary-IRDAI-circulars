@@ -63,18 +63,102 @@ llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_vers
 st.set_page_config(layout="wide")
  
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
- 
-def is_english(text):
-    try:
-        return detect(text.strip()) == "en"
-    except:
+
+def is_footer_or_header(text):
+    """Check if text is likely a footer, header, or unwanted metadata"""
+    text_lower = text.lower().strip()
+    
+    # Common footer/header patterns
+    footer_patterns = [
+        r'^\d+\s+the\s+gazette\s+of\s+india',  # "20 THE GAZETTE OF INDIA"
+        r'part\s+iii[—\-]sec',  # "PART III—SEC"
+        r'^\d+\s*$',  # Just page numbers
+        r'^\[\s*part\s+[iv]+',  # "[PART III"
+        r'extraordinary\s*\]?$',  # "EXTRAORDINARY]"
+        r'^\d{1,3}\s+[a-z\s]+gazette',  # Page number + gazette
+        r'^page\s+\d+',  # "Page 1"
+        r'^\d+\s+[a-z\s]*gazette[a-z\s]*extraordinary',  # Various gazette patterns
+    ]
+    
+    for pattern in footer_patterns:
+        if re.search(pattern, text_lower):
+            return True
+    
+    # Check if it's too short to be meaningful content
+    if len(text.strip()) < 10:
+        return True
+        
+    # Check if it's mostly numbers and special characters
+    if re.match(r'^[\d\s\[\]\-—.:]+$', text.strip()):
+        return True
+        
+    return False
+
+def is_meaningful_english(text):
+    """Check if text contains meaningful English content"""
+    if not text or len(text.strip()) < 3:
         return False
+        
+    # Skip if it's a footer/header
+    if is_footer_or_header(text):
+        return False
+    
+    try:
+        # Use language detection but be more lenient
+        detected_lang = detect(text.strip())
+        if detected_lang != "en":
+            return False
+    except:
+        # If detection fails, use other heuristics
+        pass
+    
+    # Check if it contains meaningful English words
+    english_words = re.findall(r'\b[a-zA-Z]{3,}\b', text)
+    if len(english_words) < 2:  # At least 2 meaningful words
+        return False
+    
+    # Check ratio of alphabetic characters
+    alpha_chars = sum(1 for c in text if c.isalpha())
+    total_chars = len(text.replace(' ', ''))
+    
+    if total_chars > 0 and alpha_chars / total_chars < 0.3:
+        return False
+    
+    return True
+
+def clean_and_extract_text(text):
+    """Clean and extract meaningful text from a page"""
+    if not text:
+        return ""
+    
+    # Split into lines first
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Skip obvious footers/headers
+        if is_footer_or_header(line):
+            continue
+            
+        # Clean up the line
+        # Remove excessive whitespace
+        line = re.sub(r'\s+', ' ', line)
+        
+        # Only keep lines with meaningful content
+        if is_meaningful_english(line):
+            cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
 
 def get_summary_prompt(text):
     return f"""
 You are a domain expert in insurance compliance and regulation.
  
-Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+Your task is to generate a **clean, concise, section-wise summary** of the input document while preserving the **original structure and flow** of the document.
  
 ---
  
@@ -154,17 +238,22 @@ if uploaded_file:
  
     with pdfplumber.open(uploaded_file) as pdf:
         for i, page in enumerate(pdf.pages, 1):
-            text = page.extract_text()
-            if text:
-                sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
-                english_sentences = [s for s in sentences if is_english(s)]
-                if english_sentences:
-                    english_text += f"\n\n--- Page {i} ---\n" + ".".join(english_sentences) + "."
+            raw_text = page.extract_text()
+            if raw_text:
+                # Clean and extract meaningful text
+                cleaned_text = clean_and_extract_text(raw_text)
+                
+                if cleaned_text.strip():
+                    english_text += f"\n\n--- Page {i} ---\n{cleaned_text}"
                 else:
-                    st.warning(f"Skipping non-English Page {i}")
+                    st.info(f"Page {i}: No meaningful content after filtering")
  
     if english_text.strip():
-        with st.spinner("Summarizing English content..."):
+        # Show preview of extracted text
+        with st.expander("Preview Extracted Text"):
+            st.text_area("Extracted Content", english_text[:2000] + "..." if len(english_text) > 2000 else english_text, height=300)
+        
+        with st.spinner("Summarizing content..."):
             full_summary = summarize_text_with_langchain(english_text)
  
         st.subheader("Summary")
@@ -173,4 +262,4 @@ if uploaded_file:
         docx_file = generate_docx(full_summary)
         st.download_button("Download Summary (DOCX)", data=docx_file, file_name="Summary.docx")
     else:
-        st.error("No English content found in the uploaded PDF.")
+        st.error("No meaningful content found in the uploaded PDF after filtering.")
