@@ -81,8 +81,7 @@ def extract_english_text(text):
                     if re.search(r'\b(the|and|or|of|to|in|for|with|by|from|at|is|are|was|were)\b', sentence.lower()):
                         english_sentences.append(sentence)
         
-        english = '. '.join(english_sentences) + '.'
-        logger.info(english)
+        return '. '.join(english_sentences) + '.'
     
     except Exception as e:
         st.warning(f"Language detection error: {e}. Using original text.")
