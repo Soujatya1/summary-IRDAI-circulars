@@ -70,22 +70,478 @@ def extract_english_text(text):
     """
     Enhanced function to extract English text from mixed language content.
     Uses langdetect library with fallback to keyword-based detection.
+    Filters out headers, footers, and document metadata.
     """
     try:
         sentences = re.split(r'[.!?]+', text)
         english_sentences = []
         
+        # Patterns to exclude (headers, footers, metadata)
+        exclude_patterns = [
+            r'^\d+\s+THE GAZETTE OF INDIA',
+            r'PART\s+[IVX]+—SEC',
+            r'EXTRAORDINARY',
+            r'^\d+\s*
+
+def get_summary_prompt(text):
+    return f"""
+You are a domain expert in insurance compliance and regulation.
+ 
+Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+ 
+---
+ 
+### Mandatory Summarization Rules:
+ 
+1. **Follow the original structure strictly** — maintain the same order of:
+   - Section headings
+   - Subheadings
+   - Bullet points
+   - Tables
+   - Date-wise event history
+   - UIDAI / IRDAI / eGazette circulars
+ 
+2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
+ 
+3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
+   - Keep it brief, but **do not omit the core message**.
+   - Avoid generalizations or overly descriptive rewriting.
+ 
+4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
+ 
+5. If the section contains **tabular data**, preserve **column-wise details**:
+   - Include every row and column in a concise bullet or structured format.
+   - Do not merge or generalize rows — maintain data fidelity.
+ 
+6. If a section contains **violations, fines, or penalties**, mention each item clearly:
+   - List out exact violation titles and actions taken or proposed.
+ 
+7. For **date-wise circulars or history**, ensure that:
+   - **No dates are skipped or merged.**
+   - Maintain **chronological order**.
+   - Mention full references such as "IRDAI Circular dated 12-May-2022".
+ 
+---
+ 
+### Output Format:
+ 
+- Follow the exact **order and structure** of the input file.
+- Do **not invent new headings** or sections.
+- Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
+ 
+---
+ 
+Now, generate a section-wise structured summary of the document below:
+--------------------
+{text}
+"""
+ 
+def summarize_text_with_langchain(text):
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=3500,
+        chunk_overlap=100
+    )
+    chunks = text_splitter.split_text(text)
+    summaries = []
+ 
+    for i, chunk in enumerate(chunks, 1):
+        prompt = get_summary_prompt(chunk)
+        response = llm([HumanMessage(content=prompt)])
+        summaries.append(response.content.strip())
+ 
+    return "\n\n".join(summaries)
+ 
+def generate_docx(summary_text):
+    doc = Document()
+    doc.add_heading("Summary", level=1)
+    for para in summary_text.split("\n\n"):
+        doc.add_paragraph(para.strip())
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+ 
+if uploaded_file:
+    st.success("File uploaded successfully!")
+    english_text = ""
+ 
+    with pdfplumber.open(uploaded_file) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if text:
+                # Use the enhanced extract_english_text function
+                english_content = extract_english_text(text)
+                if english_content.strip():
+                    english_text += f"\n\n--- Page {i} ---\n" + english_content
+                else:
+                    st.warning(f"Skipping non-English Page {i}")
+ 
+    if english_text.strip():
+        with st.spinner("Summarizing English content..."):
+            full_summary = summarize_text_with_langchain(english_text)
+ 
+        st.subheader("Summary")
+        st.text_area("Preview", full_summary, height=500)
+ 
+        docx_file = generate_docx(full_summary)
+        st.download_button("Download Summary (DOCX)", data=docx_file, file_name="Summary.docx")
+    else:
+        st.error("No English content found in the uploaded PDF."),  # Just numbers
+            r'^Page\s+\d+',
+            r'^Fig\.\s*\d*',
+            r'^Table\s*\d*',
+            r'^Chapter\s+\d+',
+            r'^Section\s+\d+',
+            r'^\[.*\]
+
+def get_summary_prompt(text):
+    return f"""
+You are a domain expert in insurance compliance and regulation.
+ 
+Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+ 
+---
+ 
+### Mandatory Summarization Rules:
+ 
+1. **Follow the original structure strictly** — maintain the same order of:
+   - Section headings
+   - Subheadings
+   - Bullet points
+   - Tables
+   - Date-wise event history
+   - UIDAI / IRDAI / eGazette circulars
+ 
+2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
+ 
+3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
+   - Keep it brief, but **do not omit the core message**.
+   - Avoid generalizations or overly descriptive rewriting.
+ 
+4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
+ 
+5. If the section contains **tabular data**, preserve **column-wise details**:
+   - Include every row and column in a concise bullet or structured format.
+   - Do not merge or generalize rows — maintain data fidelity.
+ 
+6. If a section contains **violations, fines, or penalties**, mention each item clearly:
+   - List out exact violation titles and actions taken or proposed.
+ 
+7. For **date-wise circulars or history**, ensure that:
+   - **No dates are skipped or merged.**
+   - Maintain **chronological order**.
+   - Mention full references such as "IRDAI Circular dated 12-May-2022".
+ 
+---
+ 
+### Output Format:
+ 
+- Follow the exact **order and structure** of the input file.
+- Do **not invent new headings** or sections.
+- Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
+ 
+---
+ 
+Now, generate a section-wise structured summary of the document below:
+--------------------
+{text}
+"""
+ 
+def summarize_text_with_langchain(text):
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=3500,
+        chunk_overlap=100
+    )
+    chunks = text_splitter.split_text(text)
+    summaries = []
+ 
+    for i, chunk in enumerate(chunks, 1):
+        prompt = get_summary_prompt(chunk)
+        response = llm([HumanMessage(content=prompt)])
+        summaries.append(response.content.strip())
+ 
+    return "\n\n".join(summaries)
+ 
+def generate_docx(summary_text):
+    doc = Document()
+    doc.add_heading("Summary", level=1)
+    for para in summary_text.split("\n\n"):
+        doc.add_paragraph(para.strip())
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+ 
+if uploaded_file:
+    st.success("File uploaded successfully!")
+    english_text = ""
+ 
+    with pdfplumber.open(uploaded_file) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if text:
+                # Use the enhanced extract_english_text function
+                english_content = extract_english_text(text)
+                if english_content.strip():
+                    english_text += f"\n\n--- Page {i} ---\n" + english_content
+                else:
+                    st.warning(f"Skipping non-English Page {i}")
+ 
+    if english_text.strip():
+        with st.spinner("Summarizing English content..."):
+            full_summary = summarize_text_with_langchain(english_text)
+ 
+        st.subheader("Summary")
+        st.text_area("Preview", full_summary, height=500)
+ 
+        docx_file = generate_docx(full_summary)
+        st.download_button("Download Summary (DOCX)", data=docx_file, file_name="Summary.docx")
+    else:
+        st.error("No English content found in the uploaded PDF."),  # Text in square brackets
+            r'^CIN\s*:',
+            r'^REGD\.\s*NO\.',
+            r'^www\.',
+            r'@\w+\.(com|org|gov|in)',
+            r'^\d{4}
+
+def get_summary_prompt(text):
+    return f"""
+You are a domain expert in insurance compliance and regulation.
+ 
+Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+ 
+---
+ 
+### Mandatory Summarization Rules:
+ 
+1. **Follow the original structure strictly** — maintain the same order of:
+   - Section headings
+   - Subheadings
+   - Bullet points
+   - Tables
+   - Date-wise event history
+   - UIDAI / IRDAI / eGazette circulars
+ 
+2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
+ 
+3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
+   - Keep it brief, but **do not omit the core message**.
+   - Avoid generalizations or overly descriptive rewriting.
+ 
+4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
+ 
+5. If the section contains **tabular data**, preserve **column-wise details**:
+   - Include every row and column in a concise bullet or structured format.
+   - Do not merge or generalize rows — maintain data fidelity.
+ 
+6. If a section contains **violations, fines, or penalties**, mention each item clearly:
+   - List out exact violation titles and actions taken or proposed.
+ 
+7. For **date-wise circulars or history**, ensure that:
+   - **No dates are skipped or merged.**
+   - Maintain **chronological order**.
+   - Mention full references such as "IRDAI Circular dated 12-May-2022".
+ 
+---
+ 
+### Output Format:
+ 
+- Follow the exact **order and structure** of the input file.
+- Do **not invent new headings** or sections.
+- Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
+ 
+---
+ 
+Now, generate a section-wise structured summary of the document below:
+--------------------
+{text}
+"""
+ 
+def summarize_text_with_langchain(text):
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=3500,
+        chunk_overlap=100
+    )
+    chunks = text_splitter.split_text(text)
+    summaries = []
+ 
+    for i, chunk in enumerate(chunks, 1):
+        prompt = get_summary_prompt(chunk)
+        response = llm([HumanMessage(content=prompt)])
+        summaries.append(response.content.strip())
+ 
+    return "\n\n".join(summaries)
+ 
+def generate_docx(summary_text):
+    doc = Document()
+    doc.add_heading("Summary", level=1)
+    for para in summary_text.split("\n\n"):
+        doc.add_paragraph(para.strip())
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+ 
+if uploaded_file:
+    st.success("File uploaded successfully!")
+    english_text = ""
+ 
+    with pdfplumber.open(uploaded_file) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if text:
+                # Use the enhanced extract_english_text function
+                english_content = extract_english_text(text)
+                if english_content.strip():
+                    english_text += f"\n\n--- Page {i} ---\n" + english_content
+                else:
+                    st.warning(f"Skipping non-English Page {i}")
+ 
+    if english_text.strip():
+        with st.spinner("Summarizing English content..."):
+            full_summary = summarize_text_with_langchain(english_text)
+ 
+        st.subheader("Summary")
+        st.text_area("Preview", full_summary, height=500)
+ 
+        docx_file = generate_docx(full_summary)
+        st.download_button("Download Summary (DOCX)", data=docx_file, file_name="Summary.docx")
+    else:
+        st.error("No English content found in the uploaded PDF."),  # Just years
+            r'^[A-Z\s]{10,}
+
+def get_summary_prompt(text):
+    return f"""
+You are a domain expert in insurance compliance and regulation.
+ 
+Your task is to generate a **clean, concise, section-wise summary** of the input  document while preserving the **original structure and flow** of the document.
+ 
+---
+ 
+### Mandatory Summarization Rules:
+ 
+1. **Follow the original structure strictly** — maintain the same order of:
+   - Section headings
+   - Subheadings
+   - Bullet points
+   - Tables
+   - Date-wise event history
+   - UIDAI / IRDAI / eGazette circulars
+ 
+2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
+ 
+3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
+   - Keep it brief, but **do not omit the core message**.
+   - Avoid generalizations or overly descriptive rewriting.
+ 
+4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
+ 
+5. If the section contains **tabular data**, preserve **column-wise details**:
+   - Include every row and column in a concise bullet or structured format.
+   - Do not merge or generalize rows — maintain data fidelity.
+ 
+6. If a section contains **violations, fines, or penalties**, mention each item clearly:
+   - List out exact violation titles and actions taken or proposed.
+ 
+7. For **date-wise circulars or history**, ensure that:
+   - **No dates are skipped or merged.**
+   - Maintain **chronological order**.
+   - Mention full references such as "IRDAI Circular dated 12-May-2022".
+ 
+---
+ 
+### Output Format:
+ 
+- Follow the exact **order and structure** of the input file.
+- Do **not invent new headings** or sections.
+- Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
+ 
+---
+ 
+Now, generate a section-wise structured summary of the document below:
+--------------------
+{text}
+"""
+ 
+def summarize_text_with_langchain(text):
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=3500,
+        chunk_overlap=100
+    )
+    chunks = text_splitter.split_text(text)
+    summaries = []
+ 
+    for i, chunk in enumerate(chunks, 1):
+        prompt = get_summary_prompt(chunk)
+        response = llm([HumanMessage(content=prompt)])
+        summaries.append(response.content.strip())
+ 
+    return "\n\n".join(summaries)
+ 
+def generate_docx(summary_text):
+    doc = Document()
+    doc.add_heading("Summary", level=1)
+    for para in summary_text.split("\n\n"):
+        doc.add_paragraph(para.strip())
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+ 
+if uploaded_file:
+    st.success("File uploaded successfully!")
+    english_text = ""
+ 
+    with pdfplumber.open(uploaded_file) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if text:
+                # Use the enhanced extract_english_text function
+                english_content = extract_english_text(text)
+                if english_content.strip():
+                    english_text += f"\n\n--- Page {i} ---\n" + english_content
+                else:
+                    st.warning(f"Skipping non-English Page {i}")
+ 
+    if english_text.strip():
+        with st.spinner("Summarizing English content..."):
+            full_summary = summarize_text_with_langchain(english_text)
+ 
+        st.subheader("Summary")
+        st.text_area("Preview", full_summary, height=500)
+ 
+        docx_file = generate_docx(full_summary)
+        st.download_button("Download Summary (DOCX)", data=docx_file, file_name="Summary.docx")
+    else:
+        st.error("No English content found in the uploaded PDF."),  # All caps text (likely headers)
+        ]
+        
         for sentence in sentences:
             sentence = sentence.strip()
-            if len(sentence) > 10:
-                try:
-                    lang = langdetect.detect(sentence)
-                    if lang == 'en':
-                        english_sentences.append(sentence)
-                except LangDetectException:
-                    # Fallback: keyword-based detection for English
-                    if re.search(r'\b(the|and|or|of|to|in|for|with|by|from|at|is|are|was|were)\b', sentence.lower()):
-                        english_sentences.append(sentence)
+            
+            # Skip if too short
+            if len(sentence) <= 10:
+                continue
+                
+            # Skip if matches exclude patterns
+            should_exclude = False
+            for pattern in exclude_patterns:
+                if re.search(pattern, sentence, re.IGNORECASE):
+                    should_exclude = True
+                    break
+            
+            if should_exclude:
+                continue
+                
+            # Check if it's English
+            try:
+                lang = langdetect.detect(sentence)
+                if lang == 'en':
+                    english_sentences.append(sentence)
+            except LangDetectException:
+                # Fallback: keyword-based detection for English
+                if re.search(r'\b(the|and|or|of|to|in|for|with|by|from|at|is|are|was|were)\b', sentence.lower()):
+                    english_sentences.append(sentence)
         
         return '. '.join(english_sentences) + '.' if english_sentences else ""
     
@@ -110,7 +566,6 @@ Your task is to generate a **clean, concise, section-wise summary** of the input
    - Tables
    - Date-wise event history
    - UIDAI / IRDAI / eGazette circulars
-   - Avoid blank section headers to be published
  
 2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
  
