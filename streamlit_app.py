@@ -127,7 +127,7 @@ def summarize_text_with_langchain(text):
     summaries = []
  
     for i, chunk in enumerate(chunks, 1):
-        prompt = get_summary_prompt(chunk, i)
+        prompt = get_summary_prompt(chunk)
         response = llm([HumanMessage(content=prompt)])
         summaries.append(response.content.strip())
  
