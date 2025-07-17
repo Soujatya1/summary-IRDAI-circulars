@@ -6,7 +6,12 @@ from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
-from docx import Document
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+from reportlab.pdfgen import canvas
 from io import BytesIO
 import re
 import logging
@@ -142,7 +147,7 @@ You are a domain expert in insurance compliance and regulation. Your task is to 
 ### Output Format:
 - Follow the exact **order and structure** of the input file.
 - Do **not invent new headings** or sections.
-- Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
+- Please return headers and sub-headers in bold
 
 ---
 
@@ -167,15 +172,145 @@ def summarize_text_with_langchain(text):
     
     return "\n\n".join(summaries)
 
-def generate_docx(summary_text):
-    doc = Document()
-    doc.add_heading("Summary", level=1)
+def create_pdf_styles():
+    """Create custom styles for PDF formatting"""
+    styles = getSampleStyleSheet()
     
-    for para in summary_text.split("\n\n"):
-        doc.add_paragraph(para.strip())
+    # Title style
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Title'],
+        fontSize=18,
+        spaceAfter=20,
+        alignment=TA_CENTER,
+        textColor='black'
+    )
     
+    # Main heading style (for **text**)
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading1'],
+        fontSize=14,
+        spaceBefore=12,
+        spaceAfter=6,
+        alignment=TA_LEFT,
+        textColor='black'
+    )
+    
+    # Sub-heading style
+    subheading_style = ParagraphStyle(
+        'CustomSubHeading',
+        parent=styles['Heading2'],
+        fontSize=12,
+        spaceBefore=8,
+        spaceAfter=4,
+        alignment=TA_LEFT,
+        textColor='black'
+    )
+    
+    # Normal text style
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=3,
+        spaceAfter=3,
+        alignment=TA_JUSTIFY,
+        textColor='black'
+    )
+    
+    # Bullet point style
+    bullet_style = ParagraphStyle(
+        'CustomBullet',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=2,
+        spaceAfter=2,
+        leftIndent=20,
+        alignment=TA_JUSTIFY,
+        textColor='black'
+    )
+    
+    return {
+        'title': title_style,
+        'heading': heading_style,
+        'subheading': subheading_style,
+        'normal': normal_style,
+        'bullet': bullet_style
+    }
+
+def parse_markdown_to_pdf_elements(text, styles):
+    """Parse markdown-style text and convert to PDF elements"""
+    elements = []
+    lines = text.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            elements.append(Spacer(1, 6))
+            continue
+        
+        # Check for different heading levels
+        if line.startswith('**') and line.endswith('**'):
+            # Main heading
+            heading_text = line[2:-2].strip()
+            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
+        elif line.startswith('###'):
+            # Sub-heading level 3
+            heading_text = line[3:].strip()
+            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['subheading']))
+        elif line.startswith('##'):
+            # Sub-heading level 2
+            heading_text = line[2:].strip()
+            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
+        elif line.startswith('#'):
+            # Main heading
+            heading_text = line[1:].strip()
+            elements.append(Paragraph(f"<b>{heading_text}</b>", styles['heading']))
+        elif line.startswith('- ') or line.startswith('• '):
+            # Bullet point
+            bullet_text = line[2:].strip()
+            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+        elif line.startswith('* '):
+            # Bullet point
+            bullet_text = line[2:].strip()
+            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+        else:
+            # Regular paragraph - handle inline bold formatting
+            # Convert **text** to <b>text</b>
+            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+            elements.append(Paragraph(formatted_line, styles['normal']))
+    
+    return elements
+
+def generate_pdf(summary_text):
+    """Generate PDF with proper formatting"""
     buffer = BytesIO()
-    doc.save(buffer)
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=72,
+        leftMargin=72,
+        topMargin=72,
+        bottomMargin=72
+    )
+    
+    # Create styles
+    styles = create_pdf_styles()
+    
+    # Build story
+    story = []
+    
+    # Add title
+    story.append(Paragraph("<b>Document Summary</b>", styles['title']))
+    story.append(Spacer(1, 20))
+    
+    # Parse and add content
+    elements = parse_markdown_to_pdf_elements(summary_text, styles)
+    story.extend(elements)
+    
+    # Build PDF
+    doc.build(story)
     buffer.seek(0)
     return buffer
 
@@ -212,7 +347,13 @@ if uploaded_file:
         st.subheader("Summary")
         st.text_area("Preview", full_summary, height=500)
         
-        docx_file = generate_docx(full_summary)
-        st.download_button("Download Summary (DOCX)", data=docx_file, file_name="Summary.docx")
+        # Generate PDF instead of DOCX
+        pdf_file = generate_pdf(full_summary)
+        st.download_button(
+            "Download Summary (PDF)", 
+            data=pdf_file, 
+            file_name="Summary.pdf",
+            mime="application/pdf"
+        )
     else:
         st.error("No English content found in the uploaded PDF.")
