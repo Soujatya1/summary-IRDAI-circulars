@@ -276,9 +276,6 @@ def generate_pdf(summary_text):
     
     story = []
     
-    story.append(Paragraph("<b>Document Summary</b>", styles['title']))
-    story.append(Spacer(1, 20))
-    
     elements = parse_markdown_to_pdf_elements(summary_text, styles)
     story.extend(elements)
     
@@ -293,6 +290,10 @@ def clean_extracted_text(text):
     text = re.sub(r'\n{3,}', '\n\n', text)
     
     return text.strip()
+
+def generate_download_filename(original_filename):
+    name_without_ext = os.path.splitext(original_filename)[0]
+    return f"{name_without_ext}_summary.pdf"
 
 if uploaded_file:
     st.success("File uploaded successfully!")
@@ -319,10 +320,13 @@ if uploaded_file:
         st.text_area("Preview", full_summary, height=500)
         
         pdf_file = generate_pdf(full_summary)
+        
+        download_filename = generate_download_filename(uploaded_file.name)
+        
         st.download_button(
             "Download Summary (PDF)", 
             data=pdf_file, 
-            file_name="Summary.pdf",
+            file_name=download_filename,
             mime="application/pdf"
         )
     else:
