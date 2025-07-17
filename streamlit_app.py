@@ -10,6 +10,10 @@ from docx import Document
 from io import BytesIO
 from langdetect.lang_detect_exception import LangDetectException
 import re
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 with st.sidebar:
     st.header("🔧 Configuration")
@@ -77,7 +81,8 @@ def extract_english_text(text):
                     if re.search(r'\b(the|and|or|of|to|in|for|with|by|from|at|is|are|was|were)\b', sentence.lower()):
                         english_sentences.append(sentence)
         
-        return'. '.join(english_sentences) + '.'
+        english = '. '.join(english_sentences) + '.'
+        logger.info(english)
     
     except Exception as e:
         st.warning(f"Language detection error: {e}. Using original text.")
