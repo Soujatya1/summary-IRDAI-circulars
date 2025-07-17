@@ -258,32 +258,113 @@ def parse_markdown_to_pdf_elements(text, styles):
         
         # Check for different header patterns in order of priority
         
-        # Pattern 1: **Header Text** (most common from your prompt)
-        if line.startswith('**') and line.endswith('**') and len(line) > 4:
-            heading_text = line[2:-2].strip()
-            if heading_text:  # Make sure it's not empty
-                elements.append(Paragraph(heading_text, styles['heading']))
-                continue
-        
-        # Pattern 2: ### Header (markdown h3)
+        # Pattern 1: ### Header (markdown h3)
         if line.startswith('###'):
             heading_text = line[3:].strip()
             if heading_text:
                 elements.append(Paragraph(heading_text, styles['subheading']))
                 continue
         
-        # Pattern 3: ## Header (markdown h2)
+        # Pattern 2: ## Header (markdown h2)
         if line.startswith('##'):
             heading_text = line[2:].strip()
             if heading_text:
                 elements.append(Paragraph(heading_text, styles['minor_heading']))
                 continue
         
-        # Pattern 4: # Header (markdown h1)
+        # Pattern 3: # Header (markdown h1)
         if line.startswith('#'):
             heading_text = line[1:].strip()
             if heading_text:
                 elements.append(Paragraph(heading_text, styles['heading']))
+                continue
+        
+        # Pattern 4: **Header Text** - Check if entire line is bold (most common pattern)
+        # This pattern should catch lines that are entirely wrapped in **
+        bold_match = re.match(r'^\*\*(.*?)\*\*:?\s*
+
+def generate_pdf(summary_text):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=72,
+        leftMargin=72,
+        topMargin=72,
+        bottomMargin=72
+    )
+    
+    styles = create_pdf_styles()
+    
+    story = []
+    
+    # Add title
+    story.append(Paragraph("Document Summary", styles['title']))
+    story.append(Spacer(1, 20))
+    
+    elements = parse_markdown_to_pdf_elements(summary_text, styles)
+    story.extend(elements)
+    
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+def clean_extracted_text(text):
+    text = re.sub(r'\n\n--- Page \d+ ---\n', '\n\n', text)
+    text = re.sub(r'--- Page \d+ ---', '', text)
+    
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
+def generate_download_filename(original_filename):
+    name_without_ext = os.path.splitext(original_filename)[0]
+    return f"{name_without_ext}_summary.pdf"
+
+if uploaded_file:
+    st.success("File uploaded successfully!")
+    english_text = ""
+    
+    with pdfplumber.open(uploaded_file) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if text:
+                sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
+                english_sentences = [s for s in sentences if is_english(s)]
+                
+                if english_sentences:
+                    english_text += f"\n\n--- Page {i} ---\n" + ".".join(english_sentences) + "."
+                else:
+                    st.warning(f"Skipping non-English Page {i}")
+    
+    if english_text.strip():
+        english_text = clean_extracted_text(english_text)
+        with st.spinner("Summarizing English content..."):
+            full_summary = summarize_text_with_langchain(english_text)
+        
+        st.subheader("Summary")
+        st.text_area("Preview", full_summary, height=500)
+        
+        pdf_file = generate_pdf(full_summary)
+        
+        download_filename = generate_download_filename(uploaded_file.name)
+        
+        st.download_button(
+            "Download Summary (PDF)", 
+            data=pdf_file, 
+            file_name=download_filename,
+            mime="application/pdf"
+        )
+    else:
+        st.error("No English content found in the uploaded PDF."), line)
+        if bold_match:
+            heading_text = bold_match.group(1).strip()
+            if heading_text:
+                # Determine if it's a main heading or subheading based on context
+                if ':' in line or len(heading_text.split()) <= 4:
+                    elements.append(Paragraph(heading_text, styles['heading']))
+                else:
+                    elements.append(Paragraph(heading_text, styles['subheading']))
                 continue
         
         # Pattern 5: Lines that look like headers (ALL CAPS or Title Case with colons)
@@ -299,17 +380,26 @@ def parse_markdown_to_pdf_elements(text, styles):
         # Pattern 7: Bullet points
         if line.startswith('- ') or line.startswith('• '):
             bullet_text = line[2:].strip()
+            # Check if bullet text has bold formatting
+            if '**' in bullet_text:
+                bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
             continue
         
         if line.startswith('* '):
             bullet_text = line[2:].strip()
+            # Check if bullet text has bold formatting
+            if '**' in bullet_text:
+                bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
             continue
         
         # Pattern 8: Numbered lists
         if re.match(r'^\d+\.\s', line):
             list_text = re.sub(r'^\d+\.\s', '', line)
+            # Check if list text has bold formatting
+            if '**' in list_text:
+                list_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', list_text)
             elements.append(Paragraph(f"• {list_text}", styles['bullet']))
             continue
         
