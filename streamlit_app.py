@@ -102,8 +102,18 @@ def is_footer_or_header(text):
 
 def is_english(text):
     try:
+        if any(keyword in text.upper() for keyword in [
+            'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA',
+            'NOTIFICATION',
+            'REGULATIONS',
+            'F. NO.',
+            'IN EXERCISE OF THE POWERS'
+        ]):
+            return True
+            
         if is_footer_or_header(text):
             return False
+            
         return detect(text.strip()) == "en"
     except:
         return False
