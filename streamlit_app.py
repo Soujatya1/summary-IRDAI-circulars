@@ -62,7 +62,6 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
 
 llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
 
-# Streamlit UI
 st.set_page_config(layout="wide")
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
@@ -70,7 +69,7 @@ def is_footer_or_header(text):
     text = text.strip().upper()
     
     footer_patterns = [
-        r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC',
+        r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC.*$',
         r'^\d+\s+THE GAZETTE OF INDIA',
         r'PART\s+III.*SEC\.',
         r'EXTRAORDINARY.*PART.*III',
