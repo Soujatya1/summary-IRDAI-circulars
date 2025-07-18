@@ -66,102 +66,47 @@ st.set_page_config(layout="wide")
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
 def is_footer_or_header(text):
-    """
-    More precise header/footer detection that won't catch main content
-    """
     text = text.strip().upper()
     
-    # Skip very short texts that are likely headers/footers
-    if len(text.split()) <= 3:
-        return True
+    # Skip filtering if text contains important regulatory content
+    if any(keyword in text for keyword in [
+        'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA',
+        'NOTIFICATION',
+        'REGULATIONS',
+        'F. NO.',
+        'IN EXERCISE OF THE POWERS'
+    ]):
+        return False
     
-    # Very specific footer patterns for gazette documents
     footer_patterns = [
-        r'^THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC.*$',  # Must be exact line
-        r'^\d+\s+THE GAZETTE OF INDIA.*$',  # Page number + gazette
-        r'^PART\s+III.*SEC\.\s*\d*\s*$',  # Exact part section format
-        r'^EXTRAORDINARY.*PART.*III\s*$',  # Exact extraordinary format
-        r'^\d+\s*$',  # Just page numbers
-        r'^[IVX]+\s*$',  # Just roman numerals
-        r'^PAGE\s+\d+\s*$',  # Just page references
-        r'^CONTINUED\s+ON\s+NEXT\s+PAGE\s*$',
-        r'^\d+\s+OF\s+\d+\s*$',
-        r'^रजिस्ट्री सं\.\s*डी\.एल\.-\d+\/\d+.*$',  # Registry numbers
-        r'^REGD\.\s*No\.\s*D\.\s*L\.-\d+\/\d+.*$',  # Registration numbers
-        r'^CG-TL-E-\d+-\d+\s*$',  # Document codes
-        r'^सी\.जी\.-टी\.एल\.-अ\.-\d+-\d+\s*$',  # Hindi document codes
+        r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC.*$',
+        r'^\d+\s+THE GAZETTE OF INDIA',
+        r'PART\s+III.*SEC\.',
+        r'EXTRAORDINARY.*PART.*III',
+        r'^\d+\s+.*GAZETTE.*INDIA',
+        r'PAGE\s+\d+',
+        r'^\d+\s*$',
+        r'^[IVX]+\s*$',
+        r'CONTINUED\s+ON\s+NEXT\s+PAGE',
+        r'^\d+\s+OF\s+\d+$',
     ]
     
-    # Check if the entire text matches footer patterns
     for pattern in footer_patterns:
         if re.search(pattern, text):
             return True
     
-    # Check for very short gazette-related text that's clearly header/footer
-    gazette_keywords = ['GAZETTE', 'EXTRAORDINARY', 'PART', 'SEC']
-    word_count = len(text.split())
-    gazette_word_count = sum(1 for word in text.split() if word in gazette_keywords)
-    
-    # If more than 50% of words are gazette keywords and it's short, it's likely header/footer
-    if word_count <= 8 and gazette_word_count / word_count > 0.5:
+    if len(text.split()) <= 2 and any(word in text for word in ['GAZETTE', 'INDIA', 'PART', 'SEC']):
         return True
     
     return False
 
 def is_english(text):
-    """
-    Improved English detection that preserves important content
-    """
     try:
-        # Clean the text first
-        text_clean = text.strip()
-        
-        # Skip empty text
-        if not text_clean:
+        if is_footer_or_header(text):
             return False
-        
-        # First check if it's header/footer
-        if is_footer_or_header(text_clean):
-            return False
-        
-        # If text contains important regulatory keywords, prioritize it as English
-        important_keywords = [
-            'INSURANCE', 'REGULATORY', 'DEVELOPMENT', 'AUTHORITY', 
-            'NOTIFICATION', 'REGULATIONS', 'POLICY', 'PREMIUM',
-            'COVERAGE', 'BENEFITS', 'CLAIMS', 'UNDERWRITING'
-        ]
-        
-        text_upper = text_clean.upper()
-        important_word_count = sum(1 for keyword in important_keywords if keyword in text_upper)
-        
-        # If it has multiple important keywords, treat as English regardless of detection
-        if important_word_count >= 2:
-            return True
-        
-        # For shorter texts with regulatory content, be more lenient
-        if len(text_clean.split()) <= 20 and important_word_count >= 1:
-            return True
-        
-        # Use language detection for longer texts
-        if len(text_clean) > 50:
-            detected_lang = detect(text_clean)
-            return detected_lang == "en"
-        else:
-            # For shorter texts, use a more permissive approach
-            # Check if it contains mostly English characters and words
-            english_chars = sum(1 for c in text_clean if c.isascii())
-            total_chars = len(text_clean.replace(' ', ''))
-            
-            if total_chars > 0 and english_chars / total_chars > 0.7:
-                return True
-            
-            return False
-            
-    except Exception as e:
-        # If detection fails, check for English characteristics
-        english_chars = sum(1 for c in text.strip() if c.isascii())
-        total_chars = len(text.strip().replace(' ', ''))
-        return total_chars > 0 and english_chars / total_chars > 0.7
+        return detect(text.strip()) == "en"
+    except:
+        return False
 
 def get_summary_prompt(text):
     return f"""
@@ -436,11 +381,6 @@ if uploaded_file:
     
     if english_text.strip():
         english_text = clean_extracted_text(english_text)
-        
-        # Debug: Show what content was extracted
-        st.subheader("Debug: Extracted Content Preview")
-        st.text_area("First 2000 characters of extracted text:", english_text[:2000], height=200)
-        
         with st.spinner("Summarizing English content..."):
             full_summary = summarize_text_with_langchain(english_text)
         
