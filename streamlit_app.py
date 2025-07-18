@@ -90,12 +90,39 @@ def is_footer_or_header(text):
     return False
 
 def is_english(text):
-
     try:
         if is_footer_or_header(text):
             return False
-        return detect(text.strip()) == "en"
+        
+        text_stripped = text.strip()
+        
+        # Always include file numbers and regulatory references
+        if any(pattern in text_stripped.upper() for pattern in [
+            'F. NO.', 'F.NO.', 'FILE NO.', 'IRDAI', 'IRDA', 'REG/', 'NOTIFICATION'
+        ]):
+            return True
+        
+        # Always include legal authority text
+        if 'IN EXERCISE OF' in text_stripped.upper():
+            return True
+            
+        # For very short text (less than 10 characters), be more lenient
+        if len(text_stripped) < 10:
+            # Check if it contains mostly English characters
+            english_chars = sum(1 for c in text_stripped if c.isalpha() and ord(c) < 128)
+            total_chars = len([c for c in text_stripped if c.isalnum()])
+            if total_chars > 0 and (english_chars / total_chars) > 0.5:
+                return True
+        
+        # For longer text, use language detection
+        return detect(text_stripped) == "en"
     except:
+        # If detection fails, check for English-like patterns
+        text_upper = text.strip().upper()
+        # Include text that looks like regulatory content
+        regulatory_keywords = ['INSURANCE', 'AUTHORITY', 'SECTION', 'ACT', 'REGULATION', 'CIRCULAR']
+        if any(keyword in text_upper for keyword in regulatory_keywords):
+            return True
         return False
 
 def get_summary_prompt(text):
