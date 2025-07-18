@@ -90,6 +90,7 @@ def is_footer_or_header(text):
     return False
 
 def is_english(text):
+
     try:
         if is_footer_or_header(text):
             return False
@@ -105,30 +106,37 @@ You are a domain expert in insurance compliance and regulation. Your task is to 
 
 ### Mandatory Summarization Rules:
 
-1. **Follow the original structure strictly** — maintain the same order of:
-   - Section headings
-   - Subheadings
-   - Bullet points
-   - Tables
+1. **Include ALL content from the document** starting from the very beginning:
+   - **Legal/Regulatory preambles** (File numbers, authority citations, legal basis)
+   - **Notification headers** and publication details
+   - **Title and effective date information**
+   - Chapter headings and section headings
+   - Subheadings and bullet points
+   - Tables and definitions
    - Date-wise event history
    - UIDAI / IRDAI / eGazette circulars
 
-2. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
+2. **Follow the original structure strictly** — maintain the same order and DO NOT skip any sections, including:
+   - Opening legal authority statements
+   - Notification details and publication information
+   - Regulatory file numbers and citations
 
-3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
+3. **Do NOT rename or reformat section titles** — retain the exact headings from the original file.
+
+4. **Each section should be summarized in 1–5 lines**, proportional to its original length:
    - Keep it brief, but **do not omit the core message**.
-   - Avoid generalizations or overly descriptive rewriting.
+   - For legal preambles, include the key authority, act references, and purpose.
 
-4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
+5. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
 
-5. If the section contains **tabular data**, preserve **column-wise details**:
+6. If the section contains **tabular data**, preserve **column-wise details**:
    - Include every row and column in a concise bullet or structured format.
    - Do not merge or generalize rows — maintain data fidelity.
 
-6. If a section contains **violations, fines, or penalties**, mention each item clearly:
+7. If a section contains **violations, fines, or penalties**, mention each item clearly:
    - List out exact violation titles and actions taken or proposed.
 
-7. For **date-wise circulars or history**, ensure that:
+8. For **date-wise circulars or history**, ensure that:
    - **No dates are skipped or merged.**
    - Maintain **chronological order**.
    - Mention full references such as "IRDAI Circular dated 12-May-2022".
@@ -136,13 +144,15 @@ You are a domain expert in insurance compliance and regulation. Your task is to 
 ---
 
 ### Output Format:
-- Follow the exact **order and structure** of the input file.
-- Do **not invent new headings** or sections.
+- Follow the exact **order and structure** of the input file starting from the very first line.
+- Do **not skip any content** including regulatory headers, file numbers, or legal citations.
 - Format headers and sub-headers using markdown **bold** syntax: **Header Text**
 - Use bullet points with proper indentation for sub-items
 - Maintain clear hierarchy with consistent formatting
 
 ---
+
+**IMPORTANT: Start your summary from the very beginning of the document - do not skip any content including file numbers, legal citations, or regulatory preambles.**
 
 Now, generate a section-wise structured summary of the document below:
 
