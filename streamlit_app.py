@@ -68,52 +68,31 @@ uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 def is_footer_or_header(text):
     text = text.strip().upper()
     
-    # Skip filtering if text contains important regulatory content
-    if any(keyword in text for keyword in [
-        'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA',
-        'NOTIFICATION',
-        'REGULATIONS',
-        'F. NO.',
-        'IN EXERCISE OF THE POWERS'
-    ]):
-        return False
-    
+    # Be more specific about what to filter out
     footer_patterns = [
         r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC.*$',
-        r'^\d+\s+THE GAZETTE OF INDIA',
-        r'PART\s+III.*SEC\.',
-        r'EXTRAORDINARY.*PART.*III',
-        r'^\d+\s+.*GAZETTE.*INDIA',
-        r'PAGE\s+\d+',
+        r'^\d+\s+THE GAZETTE OF INDIA\s*$',  # Only if it's just this line
+        r'PART\s+III.*SEC\.\s*$',  # Only if it's just this line
+        r'PAGE\s+\d+\s*$',
         r'^\d+\s*$',
         r'^[IVX]+\s*$',
-        r'CONTINUED\s+ON\s+NEXT\s+PAGE',
-        r'^\d+\s+OF\s+\d+$',
+        # Remove the overly broad patterns that might catch important content
     ]
+    
+    # Don't filter out text that starts with "F. No." or contains "In exercise of"
+    if text.startswith('F. NO.') or 'IN EXERCISE OF' in text:
+        return False
     
     for pattern in footer_patterns:
         if re.search(pattern, text):
             return True
     
-    if len(text.split()) <= 2 and any(word in text for word in ['GAZETTE', 'INDIA', 'PART', 'SEC']):
-        return True
-    
     return False
 
 def is_english(text):
     try:
-        if any(keyword in text.upper() for keyword in [
-            'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA',
-            'NOTIFICATION',
-            'REGULATIONS',
-            'F. NO.',
-            'IN EXERCISE OF THE POWERS'
-        ]):
-            return True
-            
         if is_footer_or_header(text):
             return False
-            
         return detect(text.strip()) == "en"
     except:
         return False
