@@ -98,7 +98,7 @@ def is_english(text):
     except:
         return False
 
-def get_summary_prompt(text, page_count):
+def get_summary_prompt(text):
     return f"""
 You are a domain expert in insurance compliance and regulation.
 
@@ -145,10 +145,6 @@ Your task is to generate a **clean, concise, section-wise summary** of the input
 - Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
 
 ---
-
-### Guideline:
-
-Ensure that the **total summary length does not exceed ~50% of the English content pages** from the input document (total pages: {page_count}).
 
 Now, generate a section-wise structured summary of the document below:
 --------------------
