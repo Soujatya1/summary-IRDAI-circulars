@@ -127,12 +127,6 @@ ONLY Consider English words
 
 ### Mandatory Summarization Rules:
 
-1. **ALWAYS START with the document header information**:
-   - Document title (e.g., "Insurance Regulatory and Development Authority of India (Insurance Products) Regulations, 2024")
-   - Notification details (place, date)
-   - File number (F. No.)
-   - Legal authority citation ("In exercise of the powers conferred under...")
-
 1. **Follow the original structure strictly** — maintain the same order of:
    - Section headings
    - Subheadings
@@ -160,6 +154,7 @@ ONLY Consider English words
    - **No dates are skipped or merged.**
    - Maintain **chronological order**.
    - Mention full references such as "IRDAI Circular dated 12-May-2022".
+8. **Include ALL regulatory and legal references** including file numbers, act citations, and authority information.
 
 ---
 
