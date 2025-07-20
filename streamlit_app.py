@@ -68,6 +68,16 @@ uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 def is_footer_or_header(text):
     text = text.strip().upper()
     
+    # Always preserve regulation titles and notification headers
+    if any(pattern in text for pattern in [
+        'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA',
+        'NOTIFICATION',
+        'REGULATIONS, 2024',
+        'F. NO. IRDAI',
+        'IRDAI/REG/'
+    ]):
+        return False  # Don't filter these out
+    
     # Be more specific about what to filter out
     footer_patterns = [
         r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC.*$',
@@ -76,9 +86,7 @@ def is_footer_or_header(text):
         r'PAGE\s+\d+\s*$',
         r'^\d+\s*$',
         r'^[IVX]+\s*$',
-        # Remove the overly broad patterns that might catch important content
     ]
-    
     
     for pattern in footer_patterns:
         if re.search(pattern, text):
@@ -93,9 +101,15 @@ def is_english(text):
         
         text_stripped = text.strip()
         
-        # Always include file numbers
+        # Always include official headers, regulation numbers, and legal references
         if any(pattern in text_stripped.upper() for pattern in [
-            'F. No.', 'F.NO.', 'FILE NO.'
+            'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY',
+            'NOTIFICATION',
+            'F. NO.', 'F.NO.', 'FILE NO.',
+            'IRDAI/REG/',
+            'REGULATIONS, 2024',
+            'HYDERABAD',
+            'IN EXERCISE OF'
         ]):
             return True
         
