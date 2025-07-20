@@ -68,7 +68,6 @@ uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 def is_footer_or_header(text):
     text = text.strip().upper()
     
-    # Always preserve regulation titles and notification headers
     if any(pattern in text for pattern in [
         'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA',
         'NOTIFICATION',
@@ -76,13 +75,12 @@ def is_footer_or_header(text):
         'F. NO. IRDAI',
         'IRDAI/REG/'
     ]):
-        return False  # Don't filter these out
+        return False
     
-    # Be more specific about what to filter out
     footer_patterns = [
         r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC.*$',
-        r'^\d+\s+THE GAZETTE OF INDIA\s*$',  # Only if it's just this line
-        r'PART\s+III.*SEC\.\s*$',  # Only if it's just this line
+        r'^\d+\s+THE GAZETTE OF INDIA\s*$',
+        r'PART\s+III.*SEC\.\s*$',
         r'PAGE\s+\d+\s*$',
         r'^\d+\s*$',
         r'^[IVX]+\s*$',
@@ -101,7 +99,6 @@ def is_english(text):
         
         text_stripped = text.strip()
         
-        # Always include official headers, regulation numbers, and legal references
         if any(pattern in text_stripped.upper() for pattern in [
             'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY',
             'NOTIFICATION',
@@ -175,18 +172,15 @@ Now, generate a section-wise structured summary of the document below:
 
 
 def summarize_text_with_langchain(text):
-    # Print preview of the text before passing to LLM
     st.subheader("📋 Text Preview - Before LLM Processing")
     st.info(f"**Total characters:** {len(text)}")
     
-    # Show first 2000 characters
     preview_text = text[:2000]
     if len(text) > 2000:
         preview_text += "\n\n... [Text truncated for preview. Full text will be processed by LLM]"
     
     st.text_area("Extracted Text Preview", preview_text, height=300, disabled=True)
     
-    # Show text splitting information
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=3500,
         chunk_overlap=100
@@ -195,21 +189,18 @@ def summarize_text_with_langchain(text):
     
     st.info(f"**Text will be split into {len(chunks)} chunks** for processing")
     
-    # Show chunk previews
     with st.expander("📄 View Chunk Previews"):
         for i, chunk in enumerate(chunks, 1):
             st.write(f"**Chunk {i}** (Length: {len(chunk)} characters)")
             chunk_preview = chunk[:500] + "..." if len(chunk) > 500 else chunk
             st.text_area(f"Chunk {i} Preview", chunk_preview, height=150, disabled=True, key=f"chunk_{i}")
     
-    # Process chunks with LLM
     summaries = []
     progress_bar = st.progress(0)
     
     for i, chunk in enumerate(chunks, 1):
         st.write(f"Processing chunk {i}/{len(chunks)}...")
         
-        # Show what's being sent to LLM for this chunk
         with st.expander(f"🔍 LLM Input for Chunk {i}"):
             prompt = get_summary_prompt(chunk)
             st.text_area(f"Full Prompt for Chunk {i}", prompt, height=200, disabled=True, key=f"prompt_{i}")
@@ -217,7 +208,6 @@ def summarize_text_with_langchain(text):
         response = llm([HumanMessage(content=prompt)])
         summaries.append(response.content.strip())
         
-        # Update progress
         progress_bar.progress(i / len(chunks))
     
     progress_bar.empty()
@@ -235,7 +225,6 @@ def create_pdf_styles():
         textColor='black'
     )
     
-    # Main heading style (for **text** patterns)
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading1'],
@@ -247,7 +236,6 @@ def create_pdf_styles():
         fontName='Helvetica-Bold'
     )
     
-    # Subheading style (for ### patterns)
     subheading_style = ParagraphStyle(
         'CustomSubHeading',
         parent=styles['Heading2'],
