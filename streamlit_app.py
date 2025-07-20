@@ -122,7 +122,7 @@ def get_summary_prompt(text):
 You are a domain expert in insurance compliance and regulation.
 
 Your task is to generate a **clean, concise, section-wise summary** of the input IRDAI/regulatory document while preserving the **original structure and flow** of the document.
-
+ONLY Consider English words
 ---
 
 ### Mandatory Summarization Rules:
