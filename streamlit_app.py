@@ -95,7 +95,7 @@ def is_english(text):
         
         # Always include file numbers
         if any(pattern in text_stripped.upper() for pattern in [
-            'F. NO.', 'F.NO.', 'FILE NO.'
+            'F. No.', 'F.NO.', 'FILE NO.'
         ]):
             return True
         
