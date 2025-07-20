@@ -158,6 +158,12 @@ ONLY Consider English words
    - Mention full references such as "IRDAI Circular dated 12-May-2022".
 8. **Include ALL regulatory and legal references** including file numbers, act citations, and authority information.
 
+1. **Use proper heading hierarchy with markdown formatting:**
+   - Use `# HEADING` for main chapters/schedules (e.g., # CHAPTER-I, # SCHEDULE I)
+   - Use `## Subheading` for major sections (e.g., ## Definitions, ## Objectives)
+   - Use `### Minor Heading` for subsections and numbered items
+   - Use `**Bold Text:**` for important terms and section labels
+
 ---
 
 ### Output Format:
@@ -310,6 +316,7 @@ def parse_markdown_to_pdf_elements(text, styles):
             elements.append(Spacer(1, 6))
             continue
         
+        # Handle markdown-style headings first
         if line.startswith('###'):
             heading_text = line[3:].strip()
             if heading_text:
@@ -328,24 +335,72 @@ def parse_markdown_to_pdf_elements(text, styles):
                 elements.append(Paragraph(heading_text, styles['heading']))
                 continue
         
+        # Handle bold markdown patterns (**text**)
         bold_match = re.match(r'^\*\*(.*?)\*\*:?\s*$', line)
         if bold_match:
             heading_text = bold_match.group(1).strip()
             if heading_text:
-                if ':' in line or len(heading_text.split()) <= 4:
+                # Determine heading level based on content
+                if any(keyword in heading_text.upper() for keyword in ['CHAPTER', 'SCHEDULE']):
                     elements.append(Paragraph(heading_text, styles['heading']))
                 else:
                     elements.append(Paragraph(heading_text, styles['subheading']))
                 continue
         
-        if line.isupper() and len(line.split()) <= 8 and ':' in line:
+        # Handle CHAPTER and SCHEDULE patterns
+        if re.match(r'^CHAPTER[-\s]*[IVX\d]+', line.upper()) or re.match(r'^SCHEDULE[-\s]*[IVX\d]+', line.upper()):
             elements.append(Paragraph(line, styles['heading']))
             continue
         
-        if line.endswith(':') and line.istitle() and len(line.split()) <= 6:
+        # Handle regulatory document patterns
+        if any(pattern in line.upper() for pattern in [
+            'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY',
+            'NOTIFICATION',
+            'REGULATIONS, 2024',
+            'F.IRDAI',
+            'PRELIMINARY',
+            'MISCELLANEOUS'
+        ]):
+            elements.append(Paragraph(line, styles['heading']))
+            continue
+        
+        # Handle section titles (short titles ending with colon)
+        if line.endswith(':') and len(line.split()) <= 8:
+            # Check if it's a definition or major section
+            if any(keyword in line.upper() for keyword in [
+                'DEFINITIONS:', 'OBJECTIVES:', 'PRINCIPLES:', 
+                'PRODUCT MANAGEMENT:', 'CLASSIFICATION:', 'PRICING:',
+                'SURRENDER VALUE:', 'MINIMUM BENEFIT:', 'REVIVAL:',
+                'MATURITY BENEFIT:', 'GRACE PERIOD:', 'MORATORIUM:'
+            ]):
+                elements.append(Paragraph(line, styles['heading']))
+            else:
+                elements.append(Paragraph(line, styles['subheading']))
+            continue
+        
+        # Handle ALL CAPS headings (but not too long)
+        if line.isupper() and len(line.split()) <= 10 and len(line) > 3:
+            # Skip if it looks like a footer/header pattern
+            if not any(pattern in line for pattern in ['GAZETTE', 'PAGE', 'PART']):
+                elements.append(Paragraph(line, styles['minor_heading']))
+                continue
+        
+        # Handle numbered sections and subsections
+        if re.match(r'^\d+\.\s+[A-Z]', line):
             elements.append(Paragraph(line, styles['subheading']))
             continue
         
+        # Handle lettered subsections (a), (b), etc.
+        if re.match(r'^\([a-z]+\)\s+[A-Z]', line):
+            elements.append(Paragraph(line, styles['minor_heading']))
+            continue
+        
+        # Handle Roman numeral sections
+        if re.match(r'^[IVX]+\.\s+[A-Z]', line):
+            elements.append(Paragraph(line, styles['subheading']))
+            continue
+        
+        # Handle bullet points
         if line.startswith('- ') or line.startswith('• '):
             bullet_text = line[2:].strip()
             if '**' in bullet_text:
@@ -360,6 +415,7 @@ def parse_markdown_to_pdf_elements(text, styles):
             elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
             continue
         
+        # Handle numbered lists
         if re.match(r'^\d+\.\s', line):
             list_text = re.sub(r'^\d+\.\s', '', line)
             if '**' in list_text:
@@ -367,14 +423,104 @@ def parse_markdown_to_pdf_elements(text, styles):
             elements.append(Paragraph(f"• {list_text}", styles['bullet']))
             continue
         
+        # Handle inline bold formatting for regular paragraphs
         if '**' in line:
             formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
             elements.append(Paragraph(formatted_line, styles['normal']))
             continue
         
+        # Default to normal paragraph
         elements.append(Paragraph(line, styles['normal']))
     
     return elements
+
+def create_pdf_styles():
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Title'],
+        fontSize=20,
+        spaceAfter=24,
+        spaceBefore=12,
+        alignment=TA_CENTER,
+        textColor='black',
+        fontName='Helvetica-Bold'
+    )
+    
+    # Main heading style (for CHAPTER, SCHEDULE, major sections)
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading1'],
+        fontSize=16,
+        spaceBefore=18,
+        spaceAfter=12,
+        alignment=TA_LEFT,
+        textColor='black',
+        fontName='Helvetica-Bold',
+        borderWidth=1,
+        borderColor='black',
+        borderPadding=6,
+        backColor='lightgrey'
+    )
+    
+    # Subheading style (for definitions, objectives, etc.)
+    subheading_style = ParagraphStyle(
+        'CustomSubHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceBefore=14,
+        spaceAfter=8,
+        alignment=TA_LEFT,
+        textColor='black',
+        fontName='Helvetica-Bold',
+        underlineWidth=1
+    )
+    
+    # Minor heading style (for numbered sections, subsections)
+    minor_heading_style = ParagraphStyle(
+        'CustomMinorHeading',
+        parent=styles['Heading3'],
+        fontSize=12,
+        spaceBefore=10,
+        spaceAfter=6,
+        alignment=TA_LEFT,
+        textColor='black',
+        fontName='Helvetica-Bold'
+    )
+    
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=3,
+        spaceAfter=3,
+        alignment=TA_JUSTIFY,
+        textColor='black',
+        leftIndent=0,
+        rightIndent=0
+    )
+    
+    bullet_style = ParagraphStyle(
+        'CustomBullet',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=2,
+        spaceAfter=2,
+        leftIndent=24,
+        bulletIndent=12,
+        alignment=TA_JUSTIFY,
+        textColor='black'
+    )
+    
+    return {
+        'title': title_style,
+        'heading': heading_style,
+        'subheading': subheading_style,
+        'minor_heading': minor_heading_style,
+        'normal': normal_style,
+        'bullet': bullet_style
+    }
 
 def generate_pdf(summary_text):
     buffer = BytesIO()
