@@ -137,10 +137,7 @@ ONLY Consider English words
 
 2. **Do NOT rename or reformat header names or section titles** — retain the exact headings from the original file.
 
-2. **Include COMPLETE header information in the EXACT sequence as provided**:
-   - Keep the original caps/formatting (e.g., "INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA")
-   - Include ALL details: notification info, file numbers, legal citations
-   - Do NOT break into separate lines unless they were separate in the original
+2. Include ALL details: notification info, file numbers (F. No.), legal citations
 
 3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
    - Keep it brief, but **do not omit the core message**.
