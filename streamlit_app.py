@@ -79,9 +79,6 @@ def is_footer_or_header(text):
         # Remove the overly broad patterns that might catch important content
     ]
     
-    # Don't filter out text that starts with "F. No." or contains "In exercise of"
-    if text.startswith('F. NO.') or 'IN EXERCISE OF' in text:
-        return False
     
     for pattern in footer_patterns:
         if re.search(pattern, text):
