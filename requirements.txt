@@ -6,3 +6,4 @@ langchain-community
 langdetect
 python-docx
 reportlab
+fpdf
