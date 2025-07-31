@@ -15,6 +15,8 @@ from io import BytesIO
 import re
 import logging
 from datetime import datetime
+import textwrap
+from fpdf import FPDF
 
 # NEW IMPORTS FOR DOCX FUNCTIONALITY
 from docx import Document
