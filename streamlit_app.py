@@ -336,21 +336,6 @@ if uploaded_file is not None and llm is not None:
                     
                     col1, col2 = st.columns(2)
                     
-                    with col1:
-                        st.write("**DOCX Format**")
-                        with st.spinner("Creating DOCX..."):
-                            doc = create_docx_summary(summary, uploaded_file.name)
-                            docx_bytes = save_docx_to_bytes(doc)
-                        
-                        docx_filename = f"summary_{uploaded_file.name.replace('.pdf', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-                        
-                        st.download_button(
-                            label="📄 Download DOCX",
-                            data=docx_bytes,
-                            file_name=docx_filename,
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        )
-                    
                     with col2:
                         st.write("**PDF Format**")
                         
