@@ -213,6 +213,48 @@ Now begin the **section-wise clause-preserving summary** of the following legal 
 {text}
 """
 
+def summarize_text_with_langchain(text):
+    st.subheader("📋 Text Preview - Before LLM Processing")
+    st.info(f"**Total characters:** {len(text)}")
+    
+    preview_text = text[:2000]
+    if len(text) > 2000:
+        preview_text += "\n\n... [Text truncated for preview. Full text will be processed by LLM]"
+    
+    st.text_area("Extracted Text Preview", preview_text, height=300, disabled=True)
+    
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=3500,
+        chunk_overlap=100
+    )
+    chunks = text_splitter.split_text(text)
+    
+    st.info(f"**Text will be split into {len(chunks)} chunks** for processing")
+    
+    with st.expander("📄 View Chunk Previews"):
+        for i, chunk in enumerate(chunks, 1):
+            st.write(f"**Chunk {i}** (Length: {len(chunk)} characters)")
+            chunk_preview = chunk[:500] + "..." if len(chunk) > 500 else chunk
+            st.text_area(f"Chunk {i} Preview", chunk_preview, height=150, disabled=True, key=f"chunk_{i}")
+    
+    summaries = []
+    progress_bar = st.progress(0)
+    
+    for i, chunk in enumerate(chunks, 1):
+        st.write(f"Processing chunk {i}/{len(chunks)}...")
+        
+        with st.expander(f"🔍 LLM Input for Chunk {i}"):
+            prompt = get_summary_prompt(chunk)
+            st.text_area(f"Full Prompt for Chunk {i}", prompt, height=200, disabled=True, key=f"prompt_{i}")
+        
+        response = llm([HumanMessage(content=prompt)])
+        summaries.append(response.content.strip())
+        
+        progress_bar.progress(i / len(chunks))
+    
+    progress_bar.empty()
+    return "\n\n".join(summaries)
+
 def create_pdf_with_fpdf(summary_text, original_filename=None):
     """Generate PDF using FPDF - Simple and fast"""
     
