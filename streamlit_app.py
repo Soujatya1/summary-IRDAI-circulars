@@ -5,7 +5,7 @@ from langchain.schema import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
 from dotenv import load_dotenv
-from docx import Document
+from fpdf import FPDF
 from io import BytesIO
 import os
 
@@ -50,7 +50,9 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
     except Exception as e:
         st.error(f"Error initializing Azure OpenAI: {str(e)}")
         return None
+
 llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
+
 def get_summary_prompt(text):
     return f"""
 You are acting as a **Senior Legal Analyst** and Regulatory Compliance Officer specializing in IRDAI, UIDAI, and eGazette circulars.
@@ -142,6 +144,113 @@ Now begin the **section-wise clause-preserving summary** of the following legal 
 {text}
 """
 
+class UTF8PDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.add_page()
+        # Try to use a Unicode-compatible font
+        try:
+            self.add_font('DejaVu', '', 'DejaVuSansCondensed.ttf', uni=True)
+            self.set_font('DejaVu', '', 12)
+        except:
+            # Fallback to Arial if DejaVu is not available
+            self.set_font('Arial', '', 12)
+    
+    def header(self):
+        try:
+            self.set_font('DejaVu', '', 16)
+        except:
+            self.set_font('Arial', 'B', 16)
+        self.cell(0, 10, 'IRDAI Circular Summary', 0, 1, 'C')
+        self.ln(10)
+    
+    def footer(self):
+        self.set_y(-15)
+        try:
+            self.set_font('DejaVu', '', 8)
+        except:
+            self.set_font('Arial', '', 8)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+def generate_pdf(summary_text):
+    pdf = UTF8PDF()
+    
+    # Set margins
+    pdf.set_left_margin(20)
+    pdf.set_right_margin(20)
+    pdf.set_top_margin(30)
+    
+    try:
+        pdf.set_font('DejaVu', '', 12)
+    except:
+        pdf.set_font('Arial', '', 12)
+    
+    # Split content into paragraphs
+    paragraphs = summary_text.strip().split("\n\n")
+    
+    for para in paragraphs:
+        clean_para = para.strip()
+        if clean_para:
+            # Handle special characters and encoding
+            try:
+                # Replace problematic characters that might not render well
+                clean_para = clean_para.replace('₹', 'Rs. ')
+                clean_para = clean_para.replace('–', '-')
+                clean_para = clean_para.replace(''', "'")
+                clean_para = clean_para.replace(''', "'")
+                clean_para = clean_para.replace('"', '"')
+                clean_para = clean_para.replace('"', '"')
+                
+                # Check if paragraph looks like a heading (short and possibly numbered/titled)
+                if len(clean_para) < 100 and (clean_para.isupper() or 
+                    any(clean_para.startswith(prefix) for prefix in ['CHAPTER', 'SECTION', 'PART', 'Article'])):
+                    # Make it bold for headings
+                    try:
+                        pdf.set_font('DejaVu', 'B', 14)
+                    except:
+                        pdf.set_font('Arial', 'B', 14)
+                    pdf.ln(5)
+                    pdf.cell(0, 8, clean_para, 0, 1)
+                    pdf.ln(3)
+                    # Reset font
+                    try:
+                        pdf.set_font('DejaVu', '', 12)
+                    except:
+                        pdf.set_font('Arial', '', 12)
+                else:
+                    # Regular paragraph
+                    # Split long paragraphs into multiple lines
+                    words = clean_para.split(' ')
+                    line = ''
+                    for word in words:
+                        # Check if adding word would exceed line width
+                        test_line = line + ' ' + word if line else word
+                        if pdf.get_string_width(test_line) < (pdf.w - pdf.l_margin - pdf.r_margin):
+                            line = test_line
+                        else:
+                            if line:
+                                pdf.cell(0, 6, line, 0, 1)
+                            line = word
+                    
+                    # Print remaining line
+                    if line:
+                        pdf.cell(0, 6, line, 0, 1)
+                    
+                    pdf.ln(4)  # Space between paragraphs
+                    
+            except UnicodeEncodeError:
+                # If there are encoding issues, skip problematic characters
+                clean_para = clean_para.encode('ascii', 'ignore').decode('ascii')
+                pdf.cell(0, 6, clean_para, 0, 1)
+                pdf.ln(4)
+    
+    # Save to BytesIO buffer
+    buffer = BytesIO()
+    pdf_string = pdf.output(dest='S').encode('latin1')
+    buffer.write(pdf_string)
+    buffer.seek(0)
+    return buffer
+
 st.set_page_config(layout="wide")
 
 uploaded_file = st.file_uploader("Upload an IRDAI Circular PDF", type="pdf")
@@ -208,27 +317,11 @@ if uploaded_file:
     st.subheader("Section-wise Summary")
     st.text_area("Generated Summary:", value=full_summary, height=600)
 
-    # Generate DOCX without bold
-    def generate_docx(summary_text):
-        doc = Document()
-        doc.add_heading("IRDAI Circular Summary", level=1)
-
-        paragraphs = summary_text.strip().split("\n\n")
-        for para in paragraphs:
-            clean_para = para.strip()
-            if clean_para:
-                doc.add_paragraph(clean_para)
-
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        return buffer
-
-    # Download button
-    docx_file = generate_docx(full_summary)
+    # Download button for PDF
+    pdf_file = generate_pdf(full_summary)
     st.download_button(
-        label="Download Summary as .docx",
-        data=docx_file,
-        file_name="irdai_summary.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        label="Download Summary as .pdf",
+        data=pdf_file,
+        file_name="irdai_summary.pdf",
+        mime="application/pdf"
     )
