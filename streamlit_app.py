@@ -147,7 +147,7 @@ st.set_page_config(layout="wide")
 uploaded_file = st.file_uploader("Upload an IRDAI Circular PDF", type="pdf")
 
 if uploaded_file:
-    if MOCK_MODE or llm is None:
+    if llm is None:
         st.error("Cannot process document: Azure OpenAI client not properly configured.")
         st.stop()
     
