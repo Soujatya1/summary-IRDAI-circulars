@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from fpdf import FPDF
 from io import BytesIO
 import os
+import re
 
 with st.sidebar:
     st.header("🔧 Configuration")
