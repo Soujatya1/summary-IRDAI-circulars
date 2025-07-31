@@ -9,32 +9,48 @@ from docx import Document
 from io import BytesIO
 import os
 
-load_dotenv()
-AZURE_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
-AZURE_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
-DEPLOYMENT_NAME = os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
-AZURE_API_VERSION = os.getenv('AZURE_OPENAI_API_VERSION')
+with st.sidebar:
+    st.header("🔧 Configuration")
+    
+    azure_endpoint = st.text_input(
+        "Azure OpenAI Endpoint",
+        placeholder="https://your-resource.openai.azure.com/",
+        help="Your Azure OpenAI service endpoint"
+    )
+    
+    api_key = st.text_input(
+        "Azure OpenAI API Key",
+        type="password",
+        placeholder="Enter your API key",
+        help="Your Azure OpenAI API key"
+    )
+    
+    deployment_name = st.text_input(
+        "Deployment Name",
+        placeholder="gpt-35-turbo",
+        help="Name of your deployed model"
+    )
+    
+    api_version = st.selectbox(
+        "API Version",
+        ["2025-01-01-preview"],
+        index=0
+    )
 
-if not AZURE_API_KEY:
-    st.warning(" *AZURE_OPENAI_API_KEY environment variable not set!* Please set your API key to enable advanced formula extraction from documents.")
-    MOCK_MODE = True
-    llm = None
-else:
+def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
     try:
         llm = AzureChatOpenAI(
-            deployment_name=DEPLOYMENT_NAME,
-            azure_endpoint=AZURE_ENDPOINT,
-            api_key=AZURE_API_KEY,
-            api_version=AZURE_API_VERSION,
-            temperature=0.3
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            deployment_name=deployment_name,
+            api_version=api_version,
+            temperature=0.1
         )
-        MOCK_MODE = False
-
+        return llm
     except Exception as e:
-        st.error(f"Failed to initialize Azure OpenAI client: {str(e)}")
-        MOCK_MODE = True
-        llm = None
-
+        st.error(f"Error initializing Azure OpenAI: {str(e)}")
+        return None
+llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
 def get_summary_prompt(text):
     return f"""
 You are acting as a **Senior Legal Analyst** and Regulatory Compliance Officer specializing in IRDAI, UIDAI, and eGazette circulars.
