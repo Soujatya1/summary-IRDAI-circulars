@@ -212,11 +212,49 @@ def generate_pdf(summary_text):
             # Clean the text to handle Unicode issues
             clean_para = pdf.clean_text(clean_para)
             
-            # Check if paragraph looks like a heading
-            if len(clean_para) < 100 and (clean_para.isupper() or 
-                any(clean_para.startswith(prefix) for prefix in ['CHAPTER', 'SECTION', 'PART', 'Article'])):
-                # Make it bold for headings
-                pdf.set_font('Arial', 'B', 14)
+            # Enhanced header detection
+            is_header = False
+            font_size = 12
+            
+            # Check for different types of headers
+            if (
+                # Main document title
+                any(title in clean_para for title in ['Final Order', 'IRDAI Circular Summary']) or
+                # Section headers with numbers
+                (len(clean_para.split()) < 15 and any(clean_para.startswith(prefix) for prefix in [
+                    'CHAPTER', 'SECTION', 'PART', 'Article', 'Background', 'Charge-', 'Decision on Charge', 'Summary of Decisions'
+                ])) or
+                # Numbered sections (1., 2., 3., etc.)
+                (len(clean_para) < 150 and clean_para.strip().split('.')[0].isdigit() and len(clean_para.strip().split('.')[0]) <= 2) or
+                # Sub-sections (3.1., 4.2., etc.)
+                (len(clean_para) < 150 and '.' in clean_para[:10] and clean_para.split('.')[0].replace(' ', '').replace('\t', '').isdigit()) or
+                # Headers with #### markdown-style
+                clean_para.startswith('####') or
+                clean_para.startswith('###') or
+                # All caps short lines
+                (clean_para.isupper() and len(clean_para) < 100 and len(clean_para.split()) < 10) or
+                # Lines ending with colons (likely headers)
+                (clean_para.endswith(':') and len(clean_para) < 100)
+            ):
+                is_header = True
+                
+                # Determine font size based on header type
+                if any(title in clean_para for title in ['Final Order', 'IRDAI Circular Summary']):
+                    font_size = 16
+                elif clean_para.startswith('####'):
+                    font_size = 12
+                    clean_para = clean_para.replace('####', '').strip()
+                elif clean_para.startswith('###'):
+                    font_size = 14
+                    clean_para = clean_para.replace('###', '').strip()
+                elif any(clean_para.startswith(prefix) for prefix in ['CHAPTER', 'SECTION', 'PART']):
+                    font_size = 14
+                else:
+                    font_size = 13
+            
+            # Apply header formatting
+            if is_header:
+                pdf.set_font('Arial', 'B', font_size)
                 pdf.ln(5)
                 pdf.cell(0, 8, clean_para, 0, 1)
                 pdf.ln(3)
@@ -224,6 +262,41 @@ def generate_pdf(summary_text):
                 pdf.set_font('Arial', '', 12)
             else:
                 # Regular paragraph - handle line wrapping
+                pdf.set_font('Arial', '', 12)
+                
+                # Check if it's a bold sub-header (like **6.1.2.1.**)
+                if clean_para.startswith('**') and '**' in clean_para[2:]:
+                    # Extract the bold part and regular part
+                    end_bold = clean_para.find('**', 2)
+                    if end_bold != -1:
+                        bold_part = clean_para[2:end_bold]
+                        regular_part = clean_para[end_bold+2:].strip()
+                        
+                        # Print bold part
+                        pdf.set_font('Arial', 'B', 12)
+                        pdf.cell(0, 6, bold_part, 0, 1)
+                        pdf.set_font('Arial', '', 12)
+                        
+                        # Print regular part if exists
+                        if regular_part:
+                            words = regular_part.split(' ')
+                            line = ''
+                            for word in words:
+                                test_line = line + ' ' + word if line else word
+                                if pdf.get_string_width(test_line) < (pdf.w - pdf.l_margin - pdf.r_margin):
+                                    line = test_line
+                                else:
+                                    if line:
+                                        pdf.cell(0, 6, line, 0, 1)
+                                    line = word
+                            
+                            if line:
+                                pdf.cell(0, 6, line, 0, 1)
+                        
+                        pdf.ln(4)
+                        continue
+                
+                # Regular text wrapping
                 words = clean_para.split(' ')
                 line = ''
                 for word in words:
