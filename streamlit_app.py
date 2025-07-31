@@ -356,209 +356,58 @@ def clean_text_for_pdf(text):
     
     return text
 
-def parse_and_format_text(pdf, text):
-    """Parse text and add formatted content to PDF"""
+def add_plain_text_to_pdf(pdf, text):
+    """Add plain text to PDF without any formatting"""
+    # Clean the text for encoding compatibility
+    text = clean_text_for_pdf(text)
+    
+    # Set consistent font
+    pdf.set_font('Arial', '', 10)
+    pdf.set_text_color(0, 0, 0)
+    
+    # Split text into lines
     lines = text.split('\n')
     
     for line in lines:
-        line = line.strip()
-        if not line:
-            pdf.ln(3)  # Small line break for empty lines
-            continue
-        
-        line = clean_text_for_pdf(line)
-        
-        # Check for different heading levels and formats
-        if line.startswith('###'):
-            # Sub-subheading
-            heading_text = line[3:].strip()
-            if heading_text:
-                pdf.ln(5)
-                pdf.set_font('Arial', 'B', 11)
-                pdf.set_text_color(0, 0, 0)
-                pdf.cell(0, 8, heading_text, 0, 1, 'L')
-                pdf.ln(2)
-                continue
-        
-        elif line.startswith('##'):
-            # Subheading
-            heading_text = line[2:].strip()
-            if heading_text:
-                pdf.ln(6)
-                pdf.set_font('Arial', 'B', 12)
-                pdf.set_text_color(0, 0, 0)
-                pdf.cell(0, 8, heading_text, 0, 1, 'L')
-                pdf.ln(3)
-                continue
-        
-        elif line.startswith('#'):
-            # Main heading
-            heading_text = line[1:].strip()
-            if heading_text:
-                pdf.ln(8)
-                pdf.set_font('Arial', 'B', 14)
-                pdf.set_text_color(0, 0, 0)
-                pdf.cell(0, 10, heading_text, 0, 1, 'L')
-                pdf.ln(4)
-                continue
-        
-        # Check for bold text patterns (markdown style)
-        bold_match = re.match(r'^\*\*(.*?)\*\*:?\s*$', line)
-        if bold_match:
-            heading_text = bold_match.group(1).strip()
-            if heading_text:
-                pdf.ln(4)
-                pdf.set_font('Arial', 'B', 11)
-                pdf.set_text_color(0, 0, 0)
-                pdf.cell(0, 7, heading_text, 0, 1, 'L')
-                pdf.ln(2)
-                continue
-        
-        # Check for lines that end with colon (likely headings)
-        if line.endswith(':') and len(line.split()) <= 8:
+        if not line.strip():
+            # Empty line - add small space
             pdf.ln(4)
-            pdf.set_font('Arial', 'B', 10)
-            pdf.set_text_color(0, 0, 0)
-            pdf.cell(0, 6, line, 0, 1, 'L')
-            pdf.ln(2)
             continue
         
-        # Check for bullet points
-        if line.startswith('- ') or line.startswith('• ') or line.startswith('* '):
-            bullet_text = line[2:].strip()
-            pdf.set_font('Arial', '', 9)
-            pdf.set_text_color(0, 0, 0)
-            
-            # Add bullet point with indentation
-            pdf.cell(10, 5, '*', 0, 0, 'L')
-            
-            # Handle long bullet text with multi-line
-            remaining_width = pdf.w - pdf.l_margin - pdf.r_margin - 10
-            if pdf.get_string_width(bullet_text) > remaining_width:
-                # Multi-line bullet point
-                words = bullet_text.split()
-                current_line = ""
-                first_line = True
-                
-                for word in words:
-                    test_line = current_line + " " + word if current_line else word
-                    if pdf.get_string_width(test_line) <= remaining_width:
-                        current_line = test_line
-                    else:
-                        if current_line:
-                            if first_line:
-                                pdf.cell(0, 5, current_line, 0, 1, 'L')
-                                first_line = False
-                            else:
-                                pdf.cell(10, 5, '', 0, 0, 'L')  # Indent continuation
-                                pdf.cell(0, 5, current_line, 0, 1, 'L')
-                            current_line = word
-                        else:
-                            # Word is too long, just add it
-                            if first_line:
-                                pdf.cell(0, 5, word, 0, 1, 'L')
-                                first_line = False
-                            else:
-                                pdf.cell(10, 5, '', 0, 0, 'L')
-                                pdf.cell(0, 5, word, 0, 1, 'L')
-                
-                if current_line:
-                    if first_line:
-                        pdf.cell(0, 5, current_line, 0, 1, 'L')
-                    else:
-                        pdf.cell(10, 5, '', 0, 0, 'L')
-                        pdf.cell(0, 5, current_line, 0, 1, 'L')
-            else:
-                pdf.cell(0, 5, bullet_text, 0, 1, 'L')
-            
-            pdf.ln(1)
-            continue
-        
-        # Check for numbered lists
-        if re.match(r'^\d+\.\s', line):
-            list_text = re.sub(r'^\d+\.\s', '', line)
-            pdf.set_font('Arial', '', 9)
-            pdf.set_text_color(0, 0, 0)
-            
-            # Get the number part
-            number_match = re.match(r'^(\d+)\.\s', line)
-            if number_match:
-                number = number_match.group(1) + ". "
-                pdf.cell(15, 5, number, 0, 0, 'L')
-                
-                # Handle long list text with multi-line
-                remaining_width = pdf.w - pdf.l_margin - pdf.r_margin - 15
-                if pdf.get_string_width(list_text) > remaining_width:
-                    # Multi-line list item
-                    words = list_text.split()
-                    current_line = ""
-                    first_line = True
-                    
-                    for word in words:
-                        test_line = current_line + " " + word if current_line else word
-                        if pdf.get_string_width(test_line) <= remaining_width:
-                            current_line = test_line
-                        else:
-                            if current_line:
-                                if first_line:
-                                    pdf.cell(0, 5, current_line, 0, 1, 'L')
-                                    first_line = False
-                                else:
-                                    pdf.cell(15, 5, '', 0, 0, 'L')  # Indent continuation
-                                    pdf.cell(0, 5, current_line, 0, 1, 'L')
-                                current_line = word
-                            else:
-                                if first_line:
-                                    pdf.cell(0, 5, word, 0, 1, 'L')
-                                    first_line = False
-                                else:
-                                    pdf.cell(15, 5, '', 0, 0, 'L')
-                                    pdf.cell(0, 5, word, 0, 1, 'L')
-                    
-                    if current_line:
-                        if first_line:
-                            pdf.cell(0, 5, current_line, 0, 1, 'L')
-                        else:
-                            pdf.cell(15, 5, '', 0, 0, 'L')
-                            pdf.cell(0, 5, current_line, 0, 1, 'L')
-                else:
-                    pdf.cell(0, 5, list_text, 0, 1, 'L')
-            
-            pdf.ln(1)
-            continue
-        
-        # Regular paragraph text
-        pdf.set_font('Arial', '', 9)
-        pdf.set_text_color(0, 0, 0)
-        
-        # Handle long paragraphs with multi-line
+        # Handle long lines by wrapping them
         available_width = pdf.w - pdf.l_margin - pdf.r_margin
+        
         if pdf.get_string_width(line) > available_width:
-            # Multi-line paragraph
+            # Line is too long, wrap it
             words = line.split()
             current_line = ""
             
             for word in words:
                 test_line = current_line + " " + word if current_line else word
+                
                 if pdf.get_string_width(test_line) <= available_width:
                     current_line = test_line
                 else:
+                    # Current line is full, print it and start new line
                     if current_line:
-                        pdf.cell(0, 5, current_line, 0, 1, 'L')
+                        pdf.cell(0, 6, current_line, 0, 1, 'L')
                         current_line = word
                     else:
-                        # Word is too long, just add it
-                        pdf.cell(0, 5, word, 0, 1, 'L')
+                        # Single word is too long, just print it
+                        pdf.cell(0, 6, word, 0, 1, 'L')
             
+            # Print remaining text
             if current_line:
-                pdf.cell(0, 5, current_line, 0, 1, 'L')
+                pdf.cell(0, 6, current_line, 0, 1, 'L')
         else:
-            pdf.cell(0, 5, line, 0, 1, 'L')
+            # Line fits, print as is
+            pdf.cell(0, 6, line, 0, 1, 'L')
         
-        pdf.ln(2)
+        # Small space between lines
+        pdf.ln(1)
 
 def generate_pdf(summary_text):
-    """Generate PDF using FPDF"""
+    """Generate PDF using FPDF with plain text only"""
     pdf = CustomFPDF()
     pdf.add_page()
     
@@ -568,8 +417,8 @@ def generate_pdf(summary_text):
     pdf.cell(0, 15, 'Document Summary', 0, 1, 'C')
     pdf.ln(10)
     
-    # Parse and add formatted content
-    parse_and_format_text(pdf, summary_text)
+    # Add plain text without any formatting
+    add_plain_text_to_pdf(pdf, summary_text)
     
     # Create BytesIO buffer and save PDF
     buffer = BytesIO()
