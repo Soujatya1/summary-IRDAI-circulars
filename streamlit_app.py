@@ -269,9 +269,90 @@ def clean_text_for_pdf(text):
     text = text.replace('–', '-')
     text = text.replace('—', '-')
     text = text.replace('…', '...')
+    text = text.replace('•', '*')  # Replace bullet with asterisk
+    text = text.replace('◦', '-')  # Replace hollow bullet
+    text = text.replace('▪', '*')  # Replace square bullet
+    text = text.replace('▫', '-')  # Replace hollow square bullet
+    text = text.replace('‣', '>')  # Replace triangular bullet
+    text = text.replace('⁃', '-')  # Replace hyphen bullet
+    text = text.replace('§', 'Section')  # Section symbol
+    text = text.replace('©', '(c)')  # Copyright symbol
+    text = text.replace('®', '(r)')  # Registered trademark
+    text = text.replace('™', '(tm)')  # Trademark
+    text = text.replace('°', ' degrees')  # Degree symbol
+    text = text.replace('×', 'x')  # Multiplication sign
+    text = text.replace('÷', '/')  # Division sign
+    text = text.replace('≤', '<=')  # Less than or equal
+    text = text.replace('≥', '>=')  # Greater than or equal
+    text = text.replace('≠', '!=')  # Not equal
+    text = text.replace('α', 'alpha')  # Greek letters
+    text = text.replace('β', 'beta')
+    text = text.replace('γ', 'gamma')
+    text = text.replace('δ', 'delta')
+    text = text.replace('λ', 'lambda')
+    text = text.replace('μ', 'mu')
+    text = text.replace('π', 'pi')
+    text = text.replace('σ', 'sigma')
+    text = text.replace('Ω', 'Omega')
     
-    # Remove or replace other problematic unicode characters
-    text = text.encode('latin-1', 'ignore').decode('latin-1')
+    # Handle other currency symbols
+    text = text.replace('€', 'EUR')
+    text = text.replace('£', 'GBP')
+    text = text.replace('¥', 'JPY')
+    text = text.replace('¢', 'cents')
+    
+    # Handle fractions
+    text = text.replace('½', '1/2')
+    text = text.replace('⅓', '1/3')
+    text = text.replace('¼', '1/4')
+    text = text.replace('¾', '3/4')
+    text = text.replace('⅛', '1/8')
+    text = text.replace('⅜', '3/8')
+    text = text.replace('⅝', '5/8')
+    text = text.replace('⅞', '7/8')
+    
+    # Handle arrows and symbols
+    text = text.replace('→', '->')
+    text = text.replace('←', '<-')
+    text = text.replace('↑', '^')
+    text = text.replace('↓', 'v')
+    text = text.replace('↔', '<->')
+    text = text.replace('⇒', '=>')
+    text = text.replace('⇐', '<=')
+    text = text.replace('⇔', '<=>')
+    
+    # Handle quotation marks and apostrophes
+    text = text.replace('"', '"')
+    text = text.replace('"', '"')
+    text = text.replace(''', "'")
+    text = text.replace(''', "'")
+    text = text.replace('‚', ',')
+    text = text.replace('„', '"')
+    text = text.replace('‹', '<')
+    text = text.replace('›', '>')
+    
+    # Handle various dashes and spaces
+    text = text.replace('‐', '-')  # Hyphen
+    text = text.replace('‑', '-')  # Non-breaking hyphen
+    text = text.replace('‒', '-')  # Figure dash
+    text = text.replace('–', '-')  # En dash
+    text = text.replace('—', '--') # Em dash
+    text = text.replace('―', '--') # Horizontal bar
+    text = text.replace(' ', ' ')  # Non-breaking space
+    text = text.replace(' ', ' ')  # En space
+    text = text.replace(' ', ' ')  # Em space
+    text = text.replace(' ', ' ')  # Thin space
+    
+    # Remove or replace any remaining problematic unicode characters
+    # This will convert any remaining non-Latin-1 characters to closest equivalent or remove them
+    try:
+        # First try to encode/decode to catch any remaining issues
+        text = text.encode('latin-1', 'ignore').decode('latin-1')
+    except:
+        # If still having issues, do a more aggressive cleaning
+        import unicodedata
+        text = unicodedata.normalize('NFKD', text)
+        text = ''.join(c for c in text if ord(c) < 256)
     
     return text
 
@@ -349,7 +430,7 @@ def parse_and_format_text(pdf, text):
             pdf.set_text_color(0, 0, 0)
             
             # Add bullet point with indentation
-            pdf.cell(10, 5, '•', 0, 0, 'L')
+            pdf.cell(10, 5, '*', 0, 0, 'L')
             
             # Handle long bullet text with multi-line
             remaining_width = pdf.w - pdf.l_margin - pdf.r_margin - 10
