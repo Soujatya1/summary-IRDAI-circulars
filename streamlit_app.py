@@ -129,7 +129,10 @@ def get_summary_prompt(text):
 You are acting as a **Senior Legal Analyst** and Regulatory Compliance Officer specializing in IRDAI, UIDAI, and eGazette circulars.
  
 Your task is to generate a **legally precise, clause-preserving, structure-aligned summary** of the in-put regulatory document. Your summary will be reviewed for legal compliance, so accuracy is critical.
- 
+
+Use clean plain text.
+Do not use Markdown formatting (no **bold**, `code`, or extra spacing).
+
 ---
  
 ### LEGAL SUMMARIZATION RULES
@@ -198,9 +201,16 @@ Your task is to generate a **legally precise, clause-preserving, structure-align
 ---
  
 ### OUTPUT FORMAT:
-- Use clean plain text.
+- Use ONLY plain text with NO formatting symbols
+- DO NOT use ANY of these characters: # * ** __ ` ~ [ ] ( ) for formatting
+- DO NOT use markdown headers like ## or ###
+- DO NOT use bold markers like **text** or __text__
+- DO NOT use italic markers like *text* or _text_
+- Use simple dashes (-) or bullet points (•) for lists
+- Preserve order and hierarchy using numbers and letters (1, a, i)
+- Use CAPITAL LETTERS for emphasis instead of bold
+- Use line breaks and indentation for structure
 - Preserve order and hierarchy (e.g., 1 → a → i).
-- Do not use Markdown f-ormatting (no **bold**, `code`, or extra spacing).
 - Do not invent or rename headings.
  
 ---
