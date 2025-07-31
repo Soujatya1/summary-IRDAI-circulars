@@ -116,60 +116,94 @@ def is_english(text):
 
 def get_summary_prompt(text):
     return f"""
-You are a domain expert in insurance compliance and regulation.
-
-Your task is to generate a **clean, concise, section-wise summary** of the input IRDAI/regulatory document while preserving the **original structure and flow** of the document.
-ONLY Consider English words
+You are acting as a **Senior Legal Analyst** and Regulatory Compliance Officer specializing in IRDAI, UIDAI, and eGazette circulars.
+ 
+Your task is to generate a **legally precise, clause-preserving, structure-aligned summary** of the in-put regulatory document. Your summary will be reviewed for legal compliance, so accuracy is critical.
+ 
 ---
-
-### Mandatory Summarization Rules:
-
-1. **Follow the original structure strictly** — maintain the same order of:
-   - Section headings
-   - Subheadings
-   - Bullet points
-   - Tables
-   - Date-wise event history
-   - UIDAI / IRDAI / eGazette circulars
-
-2. **Do NOT rename or reformat header names or section titles** — retain the exact headings from the original file.
-
-2. Include ALL details: notification info, file numbers (F. No.), legal citations
-
-3. **Each section should be summarized in 1–5 lines**, proportional to its original length:
-   - Keep it brief, but **do not omit the core message**.
-   - Avoid generalizations or overly descriptive rewriting.
-
-4. If a section contains **definitions**, summarize them line by line (e.g., Definition A: …).
-
-5. If the section contains **tabular data**, preserve **column-wise details**:
-   - Include every row and column in a concise bullet or structured format.
-   - Do not merge or generalize rows — maintain data fidelity.
-
-6. If a section contains **violations, fines, or penalties**, mention each item clearly:
-   - List out exact violation titles and actions taken or proposed.
-
-7. For **date-wise circulars or history**, ensure that:
-   - **No dates are skipped or merged.**
-   - Maintain **chronological order**.
-   - Mention full references such as "IRDAI Circular dated 12-May-2022".
-8. **Include ALL regulatory and legal references** including file numbers, act citations, and authority information.
-
+ 
+### LEGAL SUMMARIZATION RULES
+ 
+**1. STRUCTURE PRESERVATION (Strict Order):**
+- Retain **original structure**, including:
+  - Section headers, subheaders, and sub-subheaders
+  - Clause numbers (e.g., 3.2.1, a), b), c))
+  - Bullet f-ormats, indentation levels
+- Do not reorder, combine, or rename any sections or sub-sections.
+ 
+**2. CLAUSE-BY-CLAUSE SUMMARIZATION (NO MERGING):**
+- **Summarize one clause per bullet/sentence only.**
+- If a clause is broken across lines or pages, **treat it as a single clause**.
+- Do not combine adjacent points even if they seem similar.
+ 
+**3. PRESERVE LEGAL PHRASES & CAUSALITY TRIGGERS:**
+- Never skip or simplify phrases like:
+  - **“unless”**, **“until”**, **“after”**, **“shall”**, **“subject to”**, **“provided that”**
+- These are **legally binding conditions** and must be **retained with their meaning intact**.
+ 
+**4. DEFINITIONS & EXPLANATORY SECTIONS:**
+- If the section contains **definitions** or cl-assifications:
+  - List each term separately using this structure:  
+    - *Definition: Revival Period* – A policy may be revived within…
+  - **Do not merge multiple definitions** into one block.
+ 
+**5. COMMITTEES, PANELS, AUTHORITIES (EXACT NAMES):**
+- Retain **every mention of committees and positions verbatim**.
+- Never shorten or generalize:
+  - “Product Management Committee (PMC)” not “product committee”
+  - “Chief Compliance Officer” not “Compliance Head”
+  - “Member – Life”, “Key Management Persons (KMPs)”, “Appointed Actuary”, etc.
+- Repeat full names every time they appear, even if already mentioned before.
+ 
+**6. TABLES – PRESERVE IN FULL:**
+- Summarize **column-by-column**, row-by-row.
+- Do not omit any row (e.g., Discontinuance Charges for all policy years).
+- If summarizing:  
+  - *Table: Discontinuance Charges*  
+    - Year 1: Lower of 2% or ₹3,000  
+    - Year 2: Lower of 1.5% or ₹2,000  
+    …
+ 
+**7. NUMERIC LIMITS & ABBREVIATIONS:**
+- Maintain correct expressions like:
+  - Rs. 1,000/- (not “Rs 1000”)
+  - “AP or FV, whichever is lower” (do not paraphrase this)
+ 
+**8. HISTORICAL & AUTHORITY CLAUSES:**
+- Include all clauses like:
+  - “Repeal and Savings”
+  - “Authority’s power to issue clarifications”
+- Do **not skip final sections** even if repetitive.
+ 
+**9. SIGNATURE, SEAL, PUBLICATION TEXT – OMIT:**
+- Strictly exclude:
+  - Signature blocks (e.g., “Debasish Panda, Chairperson”)
+  - Digital signing metadata (“Digitally signed by Manoj Kumar Verma”)
+  - Footer/publication notices (“Uploaded by Dte. of Printing…”)
+ 
+**10. LINE BREAKS & ORPHAN HANDLING:**
+- Do not treat broken lines (from PDF f-ormatting) as new clauses.
+- Ensure a single sentence broken across lines is still summarized as one thought.
+ 
 ---
-
-### Output Format:
-
-- Follow the exact **order and structure** of the input file.
-- Do **not invent new headings** or sections.
-- Avoid decorative formatting, markdown, or unnecessary bolding — use **clean plain text**.
-
+ 
+### OUTPUT FORMAT:
+- Use clean plain text.
+- Preserve order and hierarchy (e.g., 1 → a → i).
+- Do not use Markdown f-ormatting (no **bold**, `code`, or extra spacing).
+- Do not invent or rename headings.
+ 
 ---
-
-Now, generate a section-wise structured summary of the document below:
+ 
+### SUMMARY LENGTH RULE:
+- Ensure total summary length is approx. **50% of English content pages** (~{page_count} pages).
+ 
+---
+ 
+Now begin the **section-wise clause-preserving summary** of the following legal document:
 --------------------
 {text}
 """
-
 
 def summarize_text_with_langchain(text):
     st.subheader("📋 Text Preview - Before LLM Processing")
