@@ -138,7 +138,7 @@ Your task is to generate a **legally precise, clause-preserving, structure-align
  
 **3. PRESERVE LEGAL PHRASES & CAUSALITY TRIGGERS:**
 - Never skip or simplify phrases like:
-  - **“unless”**, **“until”**, **“after”**, **“shall”**, **“subject to”**, **“provided that”**
+  - **"unless"**, **"until"**, **"after"**, **"shall"**, **"subject to"**, **"provided that"**
 - These are **legally binding conditions** and must be **retained with their meaning intact**.
  
 **4. DEFINITIONS & EXPLANATORY SECTIONS:**
@@ -150,9 +150,9 @@ Your task is to generate a **legally precise, clause-preserving, structure-align
 **5. COMMITTEES, PANELS, AUTHORITIES (EXACT NAMES):**
 - Retain **every mention of committees and positions verbatim**.
 - Never shorten or generalize:
-  - “Product Management Committee (PMC)” not “product committee”
-  - “Chief Compliance Officer” not “Compliance Head”
-  - “Member – Life”, “Key Management Persons (KMPs)”, “Appointed Actuary”, etc.
+  - "Product Management Committee (PMC)" not "product committee"
+  - "Chief Compliance Officer" not "Compliance Head"
+  - "Member – Life", "Key Management Persons (KMPs)", "Appointed Actuary", etc.
 - Repeat full names every time they appear, even if already mentioned before.
  
 **6. TABLES – PRESERVE IN FULL:**
@@ -166,20 +166,20 @@ Your task is to generate a **legally precise, clause-preserving, structure-align
  
 **7. NUMERIC LIMITS & ABBREVIATIONS:**
 - Maintain correct expressions like:
-  - Rs. 1,000/- (not “Rs 1000”)
-  - “AP or FV, whichever is lower” (do not paraphrase this)
+  - Rs. 1,000/- (not "Rs 1000")
+  - "AP or FV, whichever is lower" (do not paraphrase this)
  
 **8. HISTORICAL & AUTHORITY CLAUSES:**
 - Include all clauses like:
-  - “Repeal and Savings”
-  - “Authority’s power to issue clarifications”
+  - "Repeal and Savings"
+  - "Authority's power to issue clarifications"
 - Do **not skip final sections** even if repetitive.
  
 **9. SIGNATURE, SEAL, PUBLICATION TEXT – OMIT:**
 - Strictly exclude:
-  - Signature blocks (e.g., “Debasish Panda, Chairperson”)
-  - Digital signing metadata (“Digitally signed by Manoj Kumar Verma”)
-  - Footer/publication notices (“Uploaded by Dte. of Printing…”)
+  - Signature blocks (e.g., "Debasish Panda, Chairperson")
+  - Digital signing metadata ("Digitally signed by Manoj Kumar Verma")
+  - Footer/publication notices ("Uploaded by Dte. of Printing…")
  
 **10. LINE BREAKS & ORPHAN HANDLING:**
 - Do not treat broken lines (from PDF f-ormatting) as new clauses.
@@ -250,23 +250,22 @@ def summarize_text_with_langchain(text):
 def create_pdf_styles():
     styles = getSampleStyleSheet()
     
-    # Title style
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Title'],
-        fontSize=18,
-        spaceAfter=20,
+        fontSize=20,
+        spaceAfter=24,
         alignment=TA_CENTER,
         textColor='black',
         fontName='Helvetica-Bold'
     )
     
-    # Main heading (1., 2., etc.)
+    # Main heading (Level 1)
     heading1_style = ParagraphStyle(
         'CustomHeading1',
         parent=styles['Heading1'],
-        fontSize=14,
-        spaceBefore=15,
+        fontSize=16,
+        spaceBefore=18,
         spaceAfter=8,
         alignment=TA_LEFT,
         textColor='black',
@@ -274,108 +273,99 @@ def create_pdf_styles():
         leftIndent=0
     )
     
-    # Sub heading (1.1, 1.2, etc.)
+    # Sub heading (Level 2)
     heading2_style = ParagraphStyle(
         'CustomHeading2',
         parent=styles['Heading2'],
-        fontSize=12,
-        spaceBefore=12,
+        fontSize=14,
+        spaceBefore=14,
         spaceAfter=6,
         alignment=TA_LEFT,
         textColor='black',
         fontName='Helvetica-Bold',
-        leftIndent=15
+        leftIndent=12
     )
     
-    # Sub-sub heading (1.1.1, 1.1.2, etc.)
+    # Minor heading (Level 3)
     heading3_style = ParagraphStyle(
         'CustomHeading3',
         parent=styles['Heading3'],
-        fontSize=11,
+        fontSize=12,
         spaceBefore=10,
-        spaceAfter=5,
-        alignment=TA_LEFT,
-        textColor='black',
-        fontName='Helvetica-Bold',
-        leftIndent=30
-    )
-    
-    # Minor heading (a), b), etc.)
-    heading4_style = ParagraphStyle(
-        'CustomHeading4',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceBefore=8,
         spaceAfter=4,
         alignment=TA_LEFT,
         textColor='black',
         fontName='Helvetica-Bold',
-        leftIndent=45
+        leftIndent=24
     )
     
-    # Normal paragraph
+    # Sub-minor heading (Level 4)
+    heading4_style = ParagraphStyle(
+        'CustomHeading4',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceBefore=8,
+        spaceAfter=3,
+        alignment=TA_LEFT,
+        textColor='black',
+        fontName='Helvetica-Bold',
+        leftIndent=36
+    )
+    
     normal_style = ParagraphStyle(
         'CustomNormal',
         parent=styles['Normal'],
         fontSize=10,
         spaceBefore=3,
-        spaceAfter=6,
+        spaceAfter=3,
         alignment=TA_JUSTIFY,
         textColor='black',
-        leftIndent=0,
-        firstLineIndent=0
+        leftIndent=0
     )
     
-    # Indented normal text (for content under headings)
-    indented_style = ParagraphStyle(
-        'CustomIndented',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceBefore=3,
-        spaceAfter=6,
-        alignment=TA_JUSTIFY,
-        textColor='black',
-        leftIndent=15,
-        firstLineIndent=0
-    )
-    
-    # Deep indented text
-    deep_indented_style = ParagraphStyle(
-        'CustomDeepIndented',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceBefore=3,
-        spaceAfter=6,
-        alignment=TA_JUSTIFY,
-        textColor='black',
-        leftIndent=30,
-        firstLineIndent=0
-    )
-    
-    # Bullet points
     bullet_style = ParagraphStyle(
         'CustomBullet',
         parent=styles['Normal'],
         fontSize=10,
         spaceBefore=2,
-        spaceAfter=4,
-        leftIndent=20,
+        spaceAfter=2,
+        leftIndent=24,
         alignment=TA_JUSTIFY,
-        textColor='black',
-        bulletIndent=5
+        textColor='black'
     )
     
-    # Definition style
-    definition_style = ParagraphStyle(
-        'CustomDefinition',
+    # Indented content styles for different levels
+    content1_style = ParagraphStyle(
+        'CustomContent1',
         parent=styles['Normal'],
         fontSize=10,
-        spaceBefore=4,
-        spaceAfter=4,
-        leftIndent=25,
+        spaceBefore=3,
+        spaceAfter=3,
         alignment=TA_JUSTIFY,
         textColor='black',
-        firstLineIndent=-10
+        leftIndent=12
+    )
+    
+    content2_style = ParagraphStyle(
+        'CustomContent2',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=3,
+        spaceAfter=3,
+        alignment=TA_JUSTIFY,
+        textColor='black',
+        leftIndent=24
+    )
+    
+    content3_style = ParagraphStyle(
+        'CustomContent3',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=3,
+        spaceAfter=3,
+        alignment=TA_JUSTIFY,
+        textColor='black',
+        leftIndent=36
     )
     
     return {
@@ -385,188 +375,179 @@ def create_pdf_styles():
         'heading3': heading3_style,
         'heading4': heading4_style,
         'normal': normal_style,
-        'indented': indented_style,
-        'deep_indented': deep_indented_style,
         'bullet': bullet_style,
-        'definition': definition_style
+        'content1': content1_style,
+        'content2': content2_style,
+        'content3': content3_style
     }
 
-def detect_heading_level(line):
+def detect_header_level_and_type(line):
     """
-    Detect the heading level based on numbering patterns
-    Returns (level, cleaned_text) where level is 1-4, or 0 for normal text
+    Detect if a line is a header and return its level and type
+    Returns: (is_header, level, header_type, clean_text)
     """
     line = line.strip()
+    if not line:
+        return False, 0, None, line
     
-    # Level 1: Numbers like "1.", "2.", "10." at start
-    if re.match(r'^\d+\.\s+', line):
-        return 1, line
+    # Pattern 1: Numbered headers (1., 2., 1.1, 1.2, etc.)
+    numbered_pattern = r'^(\d+(?:\.\d+)*)\.\s+(.+)$'
+    match = re.match(numbered_pattern, line)
+    if match:
+        number_part = match.group(1)
+        text_part = match.group(2).strip()
+        level = number_part.count('.') + 1
+        return True, level, 'numbered', f"<b>{number_part}. {text_part}</b>"
     
-    # Level 2: Decimal numbering like "1.1", "2.3", "10.15"
-    if re.match(r'^\d+\.\d+\.?\s+', line):
-        return 2, line
+    # Pattern 2: Roman numerals (I., II., III., etc.)
+    roman_pattern = r'^([IVX]+)\.\s+(.+)$'
+    match = re.match(roman_pattern, line)
+    if match:
+        roman_part = match.group(1)
+        text_part = match.group(2).strip()
+        return True, 1, 'roman', f"<b>{roman_part}. {text_part}</b>"
     
-    # Level 3: Three-level numbering like "1.1.1", "2.3.4"
-    if re.match(r'^\d+\.\d+\.\d+\.?\s+', line):
-        return 3, line
+    # Pattern 3: Letter headers (a), b), c), etc.)
+    letter_pattern = r'^([a-z])\)\s+(.+)$'
+    match = re.match(letter_pattern, line)
+    if match:
+        letter_part = match.group(1)
+        text_part = match.group(2).strip()
+        return True, 3, 'letter', f"<b>{letter_part}) {text_part}</b>"
     
-    # Level 4: Letter numbering like "a)", "b)", "(i)", "(ii)"
-    if re.match(r'^[a-z]\)\s+|^\([ivx]+\)\s+|^\([a-z]\)\s+', line.lower()):
-        return 4, line
+    # Pattern 4: Parenthetical numbers ((1), (2), etc.)
+    paren_pattern = r'^\((\d+)\)\s+(.+)$'
+    match = re.match(paren_pattern, line)
+    if match:
+        num_part = match.group(1)
+        text_part = match.group(2).strip()
+        return True, 4, 'parenthetical', f"<b>({num_part}) {text_part}</b>"
     
-    # Check for bold headings (common in regulatory docs)
-    if line.startswith('**') and line.endswith('**'):
-        clean_line = line[2:-2].strip()
-        # If it's short and looks like a heading
-        if len(clean_line.split()) <= 8 and (clean_line.isupper() or clean_line.istitle()):
-            return 1, clean_line
-    
-    # Check for ALL CAPS headings (but not too long)
+    # Pattern 5: All caps lines (likely headers)
     if line.isupper() and len(line.split()) <= 10 and not line.endswith('.'):
-        return 1, line
+        return True, 1, 'caps', f"<b>{line}</b>"
     
-    # Check for Title Case headings ending with colon
-    if line.endswith(':') and line.istitle() and len(line.split()) <= 8:
-        return 2, line
+    # Pattern 6: Lines ending with colon (section headers)
+    if line.endswith(':') and len(line.split()) <= 8:
+        clean_text = line[:-1].strip()
+        return True, 2, 'colon', f"<b>{clean_text}:</b>"
     
-    return 0, line
+    # Pattern 7: Bold text patterns (**text**)
+    bold_pattern = r'^\*\*(.+?)\*\*:?\s*$'
+    match = re.match(bold_pattern, line)
+    if match:
+        text_part = match.group(1).strip()
+        return True, 2, 'bold', f"<b>{text_part}</b>"
+    
+    # Pattern 8: Title case lines with specific characteristics
+    if (line.istitle() and 
+        len(line.split()) <= 8 and 
+        not line.endswith('.') and 
+        not any(char in line for char in ['(', ')', '"', "'"])):
+        return True, 2, 'title', f"<b>{line}</b>"
+    
+    return False, 0, None, line
 
-def parse_improved_markdown_to_pdf_elements(text, styles):
-    """
-    Improved parser that better handles regulatory document structure
-    """
+def parse_markdown_to_pdf_elements(text, styles):
     elements = []
     lines = text.split('\n')
-    current_indent_level = 0
+    current_section_level = 0
     
-    for i, line in enumerate(lines):
+    for line in lines:
         original_line = line
         line = line.strip()
         
-        # Skip empty lines but add appropriate spacing
+        # Skip empty lines
         if not line:
             elements.append(Spacer(1, 6))
             continue
         
-        # Detect heading level
-        heading_level, cleaned_line = detect_heading_level(line)
+        # Detect headers
+        is_header, level, header_type, formatted_text = detect_header_level_and_type(line)
         
-        if heading_level > 0:
-            # This is a heading
-            current_indent_level = heading_level
-            
-            # Clean up the text for better formatting
-            if cleaned_line.startswith('**') and cleaned_line.endswith('**'):
-                cleaned_line = cleaned_line[2:-2].strip()
+        if is_header:
+            current_section_level = level
             
             # Choose appropriate style based on level
-            if heading_level == 1:
+            if level == 1:
                 style = styles['heading1']
-            elif heading_level == 2:
+            elif level == 2:
                 style = styles['heading2']
-            elif heading_level == 3:
+            elif level == 3:
                 style = styles['heading3']
-            else:  # level 4
+            else:
                 style = styles['heading4']
             
-            elements.append(Paragraph(cleaned_line, style))
-            
+            elements.append(Paragraph(formatted_text, style))
+            continue
+        
+        # Handle bullet points and lists
+        if line.startswith('- ') or line.startswith('• '):
+            bullet_text = line[2:].strip()
+            # Convert any remaining bold markers
+            bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+            continue
+        
+        if line.startswith('* '):
+            bullet_text = line[2:].strip()
+            bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
+            continue
+        
+        # Handle numbered lists that aren't headers
+        if re.match(r'^\d+\.\s', line) and not detect_header_level_and_type(line)[0]:
+            list_text = re.sub(r'^\d+\.\s', '', line)
+            list_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', list_text)
+            elements.append(Paragraph(f"• {list_text}", styles['bullet']))
+            continue
+        
+        # Regular content - choose indentation based on current section level
+        content_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+        
+        if current_section_level == 1:
+            style = styles['content1']
+        elif current_section_level == 2:
+            style = styles['content2']
+        elif current_section_level >= 3:
+            style = styles['content3']
         else:
-            # This is regular content
-            
-            # Handle bullet points
-            if line.startswith('- ') or line.startswith('• ') or line.startswith('* '):
-                bullet_text = line[2:].strip()
-                # Handle bold text in bullets
-                if '**' in bullet_text:
-                    bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
-                elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-                
-            # Handle definition-style content (Term: Definition)
-            elif ':' in line and line.split(':')[0].strip().replace('*', '').istitle():
-                # This looks like a definition
-                parts = line.split(':', 1)
-                term = parts[0].strip().replace('*', '')
-                definition = parts[1].strip() if len(parts) > 1 else ''
-                
-                if definition:
-                    definition_text = f"<b>{term}:</b> {definition}"
-                else:
-                    definition_text = f"<b>{term}</b>"
-                
-                elements.append(Paragraph(definition_text, styles['definition']))
-                
-            # Handle numbered lists that aren't headings
-            elif re.match(r'^\d+\)\s+', line) or re.match(r'^\(\d+\)\s+', line):
-                list_text = re.sub(r'^\d+\)\s+|^\(\d+\)\s+', '', line)
-                if '**' in list_text:
-                    list_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', list_text)
-                elements.append(Paragraph(f"• {list_text}", styles['bullet']))
-                
-            else:
-                # Regular paragraph text
-                
-                # Handle bold text
-                if '**' in line:
-                    line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
-                
-                # Choose style based on current context
-                if current_indent_level == 0:
-                    style = styles['normal']
-                elif current_indent_level == 1:
-                    style = styles['indented']
-                else:
-                    style = styles['deep_indented']
-                
-                elements.append(Paragraph(line, style))
+            style = styles['normal']
+        
+        elements.append(Paragraph(content_text, style))
     
     return elements
 
-def generate_pdf(summary_text, title="Document Summary"):
-    """
-    Generate PDF with improved formatting
-    """
+def generate_pdf(summary_text):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=60,
-        leftMargin=60,
+        rightMargin=72,
+        leftMargin=72,
         topMargin=72,
         bottomMargin=72
     )
     
     styles = create_pdf_styles()
+    
     story = []
     
-    # Add title if provided
-    if title and title.strip():
-        story.append(Paragraph(title, styles['title']))
-        story.append(Spacer(1, 20))
+    # Add title if the document starts with a clear title
+    lines = summary_text.split('\n')
+    if lines and lines[0].strip() and not detect_header_level_and_type(lines[0].strip())[0]:
+        first_line = lines[0].strip()
+        if len(first_line.split()) <= 12 and first_line.isupper():
+            story.append(Paragraph(f"<b>{first_line}</b>", styles['title']))
+            story.append(Spacer(1, 12))
+            summary_text = '\n'.join(lines[1:])
     
-    # Parse and add content
-    elements = parse_improved_markdown_to_pdf_elements(summary_text, styles)
+    elements = parse_markdown_to_pdf_elements(summary_text, styles)
     story.extend(elements)
     
-    # Build the PDF
-    try:
-        doc.build(story)
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        # If there's an error, create a simple fallback PDF
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        fallback_story = [
-            Paragraph("Document Summary", styles['title']),
-            Spacer(1, 20),
-            Paragraph("Error in formatting. Raw content:", styles['heading1']),
-            Spacer(1, 10),
-            Paragraph(summary_text.replace('\n', '<br/>'), styles['normal'])
-        ]
-        doc.build(fallback_story)
-        buffer.seek(0)
-        return buffer
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 def clean_extracted_text(text):
     text = re.sub(r'\n\n--- Page \d+ ---\n', '\n\n', text)
