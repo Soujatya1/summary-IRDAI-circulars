@@ -1,113 +1,39 @@
 import streamlit as st
-import pdfplumber
-import os
+import fitz
 from langchain_openai import AzureChatOpenAI
-from langchain.schema import HumanMessage
+from langchain.schema import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
-from fpdf import FPDF
+from dotenv import load_dotenv
+from docx import Document
 from io import BytesIO
-import re
-import logging
+import os
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+load_dotenv()
+AZURE_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
+AZURE_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
+DEPLOYMENT_NAME = os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
+AZURE_API_VERSION = os.getenv('AZURE_OPENAI_API_VERSION')
 
-with st.sidebar:
-    st.header("🔧 Configuration")
-    
-    azure_endpoint = st.text_input(
-        "Azure OpenAI Endpoint",
-        placeholder="https://your-resource.openai.azure.com/",
-        help="Your Azure OpenAI service endpoint"
-    )
-    
-    api_key = st.text_input(
-        "Azure OpenAI API Key",
-        type="password",
-        placeholder="Enter your API key",
-        help="Your Azure OpenAI API key"
-    )
-    
-    deployment_name = st.text_input(
-        "Deployment Name",
-        placeholder="gpt-35-turbo",
-        help="Name of your deployed model"
-    )
-    
-    api_version = st.selectbox(
-        "API Version",
-        ["2025-01-01-preview"],
-        index=0
-    )
-
-def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
+if not AZURE_API_KEY:
+    st.warning(" *AZURE_OPENAI_API_KEY environment variable not set!* Please set your API key to enable advanced formula extraction from documents.")
+    MOCK_MODE = True
+    llm = None
+else:
     try:
         llm = AzureChatOpenAI(
-            azure_endpoint=endpoint,
-            api_key=api_key,
-            deployment_name=deployment_name,
-            api_version=api_version,
-            temperature=0.1
+            deployment_name=DEPLOYMENT_NAME,
+            azure_endpoint=AZURE_ENDPOINT,
+            api_key=AZURE_API_KEY,
+            api_version=AZURE_API_VERSION,
+            temperature=0.3
         )
-        return llm
+        MOCK_MODE = False
+
     except Exception as e:
-        st.error(f"Error initializing Azure OpenAI: {str(e)}")
-        return None
-
-llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
-
-st.set_page_config(layout="wide")
-uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
-
-def is_footer_or_header(text):
-    text = text.strip().upper()
-    
-    if any(pattern in text for pattern in [
-        'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY OF INDIA',
-        'NOTIFICATION',
-        'REGULATIONS, 2024',
-        'F. NO. IRDAI',
-        'IRDAI/REG/'
-    ]):
-        return False
-    
-    footer_patterns = [
-        r'THE GAZETTE OF INDIA.*EXTRAORDINARY.*PART.*SEC.*$',
-        r'^\d+\s+THE GAZETTE OF INDIA\s*$',
-        r'PART\s+III.*SEC\.\s*$',
-        r'PAGE\s+\d+\s*$',
-        r'^\d+\s*$',
-        r'^[IVX]+\s*$',
-    ]
-    
-    for pattern in footer_patterns:
-        if re.search(pattern, text):
-            return True
-    
-    return False
-
-def is_english(text):
-    try:
-        if is_footer_or_header(text):
-            return False
-        
-        text_stripped = text.strip()
-        
-        if any(pattern in text_stripped.upper() for pattern in [
-            'INSURANCE REGULATORY AND DEVELOPMENT AUTHORITY',
-            'NOTIFICATION',
-            'F. NO.', 'F.NO.', 'FILE NO.',
-            'IRDAI/REG/',
-            'REGULATIONS, 2024',
-            'HYDERABAD',
-            'IN EXERCISE OF'
-        ]):
-            return True
-        
-        return detect(text_stripped) == "en"
-    except:
-        return False
+        st.error(f"Failed to initialize Azure OpenAI client: {str(e)}")
+        MOCK_MODE = True
+        llm = None
 
 def get_summary_prompt(text):
     return f"""
@@ -200,283 +126,93 @@ Now begin the **section-wise clause-preserving summary** of the following legal 
 {text}
 """
 
-def summarize_text_with_langchain(text):
-    st.subheader("📋 Text Preview - Before LLM Processing")
-    st.info(f"**Total characters:** {len(text)}")
-    
-    preview_text = text[:2000]
-    if len(text) > 2000:
-        preview_text += "\n\n... [Text truncated for preview. Full text will be processed by LLM]"
-    
-    st.text_area("Extracted Text Preview", preview_text, height=300, disabled=True)
-    
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=3500,
-        chunk_overlap=100
-    )
-    chunks = text_splitter.split_text(text)
-    
-    st.info(f"**Text will be split into {len(chunks)} chunks** for processing")
-    
-    with st.expander("📄 View Chunk Previews"):
-        for i, chunk in enumerate(chunks, 1):
-            st.write(f"**Chunk {i}** (Length: {len(chunk)} characters)")
-            chunk_preview = chunk[:500] + "..." if len(chunk) > 500 else chunk
-            st.text_area(f"Chunk {i} Preview", chunk_preview, height=150, disabled=True, key=f"chunk_{i}")
-    
-    summaries = []
-    progress_bar = st.progress(0)
-    
-    for i, chunk in enumerate(chunks, 1):
-        st.write(f"Processing chunk {i}/{len(chunks)}...")
-        
-        with st.expander(f"🔍 LLM Input for Chunk {i}"):
-            prompt = get_summary_prompt(chunk)
-            st.text_area(f"Full Prompt for Chunk {i}", prompt, height=200, disabled=True, key=f"prompt_{i}")
-        
-        response = llm([HumanMessage(content=prompt)])
-        summaries.append(response.content.strip())
-        
-        progress_bar.progress(i / len(chunks))
-    
-    progress_bar.empty()
-    return "\n\n".join(summaries)
+st.set_page_config(layout="wide")
 
-class CustomFPDF(FPDF):
-    def __init__(self):
-        super().__init__()
-        self.set_auto_page_break(auto=True, margin=15)
-        
-    def header(self):
-        # Optional: Add header if needed
-        pass
-        
-    def footer(self):
-        # Add page number at the bottom
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.set_text_color(128)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-
-def clean_text_for_pdf(text):
-    """Clean text to handle encoding issues with FPDF"""
-    # Replace problematic characters
-    text = text.replace('₹', 'Rs.')
-    text = text.replace(''', "'")
-    text = text.replace(''', "'")
-    text = text.replace('"', '"')
-    text = text.replace('"', '"')
-    text = text.replace('–', '-')
-    text = text.replace('—', '-')
-    text = text.replace('…', '...')
-    text = text.replace('•', '*')  # Replace bullet with asterisk
-    text = text.replace('◦', '-')  # Replace hollow bullet
-    text = text.replace('▪', '*')  # Replace square bullet
-    text = text.replace('▫', '-')  # Replace hollow square bullet
-    text = text.replace('‣', '>')  # Replace triangular bullet
-    text = text.replace('⁃', '-')  # Replace hyphen bullet
-    text = text.replace('§', 'Section')  # Section symbol
-    text = text.replace('©', '(c)')  # Copyright symbol
-    text = text.replace('®', '(r)')  # Registered trademark
-    text = text.replace('™', '(tm)')  # Trademark
-    text = text.replace('°', ' degrees')  # Degree symbol
-    text = text.replace('×', 'x')  # Multiplication sign
-    text = text.replace('÷', '/')  # Division sign
-    text = text.replace('≤', '<=')  # Less than or equal
-    text = text.replace('≥', '>=')  # Greater than or equal
-    text = text.replace('≠', '!=')  # Not equal
-    text = text.replace('α', 'alpha')  # Greek letters
-    text = text.replace('β', 'beta')
-    text = text.replace('γ', 'gamma')
-    text = text.replace('δ', 'delta')
-    text = text.replace('λ', 'lambda')
-    text = text.replace('μ', 'mu')
-    text = text.replace('π', 'pi')
-    text = text.replace('σ', 'sigma')
-    text = text.replace('Ω', 'Omega')
-    
-    # Handle other currency symbols
-    text = text.replace('€', 'EUR')
-    text = text.replace('£', 'GBP')
-    text = text.replace('¥', 'JPY')
-    text = text.replace('¢', 'cents')
-    
-    # Handle fractions
-    text = text.replace('½', '1/2')
-    text = text.replace('⅓', '1/3')
-    text = text.replace('¼', '1/4')
-    text = text.replace('¾', '3/4')
-    text = text.replace('⅛', '1/8')
-    text = text.replace('⅜', '3/8')
-    text = text.replace('⅝', '5/8')
-    text = text.replace('⅞', '7/8')
-    
-    # Handle arrows and symbols
-    text = text.replace('→', '->')
-    text = text.replace('←', '<-')
-    text = text.replace('↑', '^')
-    text = text.replace('↓', 'v')
-    text = text.replace('↔', '<->')
-    text = text.replace('⇒', '=>')
-    text = text.replace('⇐', '<=')
-    text = text.replace('⇔', '<=>')
-    
-    # Handle quotation marks and apostrophes
-    text = text.replace('"', '"')
-    text = text.replace('"', '"')
-    text = text.replace(''', "'")
-    text = text.replace(''', "'")
-    text = text.replace('‚', ',')
-    text = text.replace('„', '"')
-    text = text.replace('‹', '<')
-    text = text.replace('›', '>')
-    
-    # Handle various dashes and spaces
-    text = text.replace('‐', '-')  # Hyphen
-    text = text.replace('‑', '-')  # Non-breaking hyphen
-    text = text.replace('‒', '-')  # Figure dash
-    text = text.replace('–', '-')  # En dash
-    text = text.replace('—', '--') # Em dash
-    text = text.replace('―', '--') # Horizontal bar
-    text = text.replace(' ', ' ')  # Non-breaking space
-    text = text.replace(' ', ' ')  # En space
-    text = text.replace(' ', ' ')  # Em space
-    text = text.replace(' ', ' ')  # Thin space
-    
-    # Remove or replace any remaining problematic unicode characters
-    # This will convert any remaining non-Latin-1 characters to closest equivalent or remove them
-    try:
-        # First try to encode/decode to catch any remaining issues
-        text = text.encode('latin-1', 'ignore').decode('latin-1')
-    except:
-        # If still having issues, do a more aggressive cleaning
-        import unicodedata
-        text = unicodedata.normalize('NFKD', text)
-        text = ''.join(c for c in text if ord(c) < 256)
-    
-    return text
-
-def add_plain_text_to_pdf(pdf, text):
-    """Add plain text to PDF without any formatting"""
-    # Clean the text for encoding compatibility
-    text = clean_text_for_pdf(text)
-    
-    # Set consistent font
-    pdf.set_font('Arial', '', 10)
-    pdf.set_text_color(0, 0, 0)
-    
-    # Split text into lines
-    lines = text.split('\n')
-    
-    for line in lines:
-        if not line.strip():
-            # Empty line - add small space
-            pdf.ln(4)
-            continue
-        
-        # Handle long lines by wrapping them
-        available_width = pdf.w - pdf.l_margin - pdf.r_margin
-        
-        if pdf.get_string_width(line) > available_width:
-            # Line is too long, wrap it
-            words = line.split()
-            current_line = ""
-            
-            for word in words:
-                test_line = current_line + " " + word if current_line else word
-                
-                if pdf.get_string_width(test_line) <= available_width:
-                    current_line = test_line
-                else:
-                    # Current line is full, print it and start new line
-                    if current_line:
-                        pdf.cell(0, 6, current_line, 0, 1, 'L')
-                        current_line = word
-                    else:
-                        # Single word is too long, just print it
-                        pdf.cell(0, 6, word, 0, 1, 'L')
-            
-            # Print remaining text
-            if current_line:
-                pdf.cell(0, 6, current_line, 0, 1, 'L')
-        else:
-            # Line fits, print as is
-            pdf.cell(0, 6, line, 0, 1, 'L')
-        
-        # Small space between lines
-        pdf.ln(1)
-
-def generate_pdf(summary_text):
-    """Generate PDF using FPDF with plain text only"""
-    pdf = CustomFPDF()
-    pdf.add_page()
-    
-    # Set title
-    pdf.set_font('Arial', 'B', 16)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 15, 'Document Summary', 0, 1, 'C')
-    pdf.ln(10)
-    
-    # Add plain text without any formatting
-    add_plain_text_to_pdf(pdf, summary_text)
-    
-    # Create BytesIO buffer and save PDF
-    buffer = BytesIO()
-    pdf_string = pdf.output(dest='S').encode('latin-1')
-    buffer.write(pdf_string)
-    buffer.seek(0)
-    
-    return buffer
-
-def clean_extracted_text(text):
-    text = re.sub(r'\n\n--- Page \d+ ---\n', '\n\n', text)
-    text = re.sub(r'--- Page \d+ ---', '', text)
-    
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    
-    return text.strip()
-
-def generate_download_filename(original_filename):
-    name_without_ext = os.path.splitext(original_filename)[0]
-    return f"{name_without_ext}_summary.pdf"
+uploaded_file = st.file_uploader("Upload an IRDAI Circular PDF", type="pdf")
 
 if uploaded_file:
-    st.success("File uploaded successfully!")
+    if MOCK_MODE or llm is None:
+        st.error("Cannot process document: Azure OpenAI client not properly configured.")
+        st.stop()
+    
+    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     english_text = ""
-    
-    with pdfplumber.open(uploaded_file) as pdf:
-        for i, page in enumerate(pdf.pages, 1):
-            text = page.extract_text()
-            if text:
-                sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
-                english_sentences = [s for s in sentences if is_english(s)]
-                
-                if english_sentences:
-                    english_text += f"\n\n--- Page {i} ---\n" + ".".join(english_sentences) + "."
-                else:
-                    st.warning(f"Skipping non-English Page {i}")
-    
-    if english_text.strip():
-        english_text = clean_extracted_text(english_text)
-        with st.spinner("Summarizing English content..."):
-            full_summary = summarize_text_with_langchain(english_text)
-        
-        st.subheader("Summary")
-        st.text_area("Preview", full_summary, height=500)
-        
-        try:
-            pdf_file = generate_pdf(full_summary)
-            
-            download_filename = generate_download_filename(uploaded_file.name)
-            
-            st.download_button(
-                "Download Summary (PDF)", 
-                data=pdf_file, 
-                file_name=download_filename,
-                mime="application/pdf"
-            )
-        except Exception as e:
-            st.error(f"Error generating PDF: {str(e)}")
-            st.info("You can still copy the summary text above.")
-    else:
-        st.error("No English content found in the uploaded PDF.")
+    print(english_text)
+    english_page_count = 0
+    total_page_count = len(doc)
+
+    for page in doc:
+        page_text = page.get_text().strip()
+        print(page_text)
+        if page_text:
+            try:
+                lang = detect(page_text)
+                if lang == "en":
+                    english_text += "\n" + page_text
+                    english_page_count += 1
+            except:
+                pass
+
+    if english_page_count == 0:
+        st.error("No English pages detected in the document.")
+        st.stop()
+
+    st.success(f"Total pages: {total_page_count} | English pages: {english_page_count}")
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
+    chunks = splitter.split_text(english_text)
+    print(chunks)
+
+    st.info(f"Summarizing {english_page_count} English pages across {len(chunks)} chunks...")
+
+    full_summary = ""
+    for i, chunk in enumerate(chunks):
+        with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
+            messages = [
+                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly."),
+                HumanMessage(content=get_summary_prompt(chunk, english_page_count))
+            ]
+            response = llm(messages)
+            full_summary += "\n\n" + response.content.strip()
+
+    # Deduplication logic
+    def remove_redundant_blocks(text):
+        lines = text.strip().split("\n")
+        cleaned = []
+        prev = ""
+        for line in lines:
+            if line.strip() != prev.strip():
+                cleaned.append(line)
+            prev = line
+        return "\n".join(cleaned)
+
+    full_summary = remove_redundant_blocks(full_summary)
+
+    # Show summary
+    st.subheader("Section-wise Summary")
+    st.text_area("Generated Summary:", value=full_summary, height=600)
+
+    # Generate DOCX without bold
+    def generate_docx(summary_text):
+        doc = Document()
+        doc.add_heading("IRDAI Circular Summary", level=1)
+
+        paragraphs = summary_text.strip().split("\n\n")
+        for para in paragraphs:
+            clean_para = para.strip()
+            if clean_para:
+                doc.add_paragraph(clean_para)
+
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+
+    # Download button
+    docx_file = generate_docx(full_summary)
+    st.download_button(
+        label="Download Summary as .docx",
+        data=docx_file,
+        file_name="irdai_summary.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
