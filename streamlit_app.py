@@ -6,10 +6,11 @@ from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
+from reportlab.lib.units import inch, cm
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+from reportlab.lib.colors import black, blue, grey, darkblue
 from reportlab.pdfgen import canvas
 from io import BytesIO
 import re
@@ -247,307 +248,269 @@ def summarize_text_with_langchain(text):
     progress_bar.empty()
     return "\n\n".join(summaries)
 
-def create_pdf_styles():
+
+def create_custom_styles():
+    """Create custom paragraph styles for different content types"""
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle(
-        'CustomTitle',
+    # Title style
+    styles.add(ParagraphStyle(
+        name='CustomTitle',
         parent=styles['Title'],
-        fontSize=20,
-        spaceAfter=24,
+        fontSize=18,
+        spaceAfter=20,
         alignment=TA_CENTER,
-        textColor='black',
+        textColor=darkblue,
         fontName='Helvetica-Bold'
-    )
+    ))
     
-    # Main heading (Level 1)
-    heading1_style = ParagraphStyle(
-        'CustomHeading1',
+    # Main heading style
+    styles.add(ParagraphStyle(
+        name='MainHeading',
         parent=styles['Heading1'],
-        fontSize=16,
-        spaceBefore=18,
-        spaceAfter=8,
-        alignment=TA_LEFT,
-        textColor='black',
-        fontName='Helvetica-Bold',
-        leftIndent=0
-    )
-    
-    # Sub heading (Level 2)
-    heading2_style = ParagraphStyle(
-        'CustomHeading2',
-        parent=styles['Heading2'],
         fontSize=14,
-        spaceBefore=14,
-        spaceAfter=6,
-        alignment=TA_LEFT,
-        textColor='black',
+        spaceAfter=12,
+        spaceBefore=18,
+        textColor=darkblue,
         fontName='Helvetica-Bold',
-        leftIndent=12
-    )
+        keepWithNext=True
+    ))
     
-    # Minor heading (Level 3)
-    heading3_style = ParagraphStyle(
-        'CustomHeading3',
-        parent=styles['Heading3'],
+    # Sub heading style
+    styles.add(ParagraphStyle(
+        name='SubHeading',
+        parent=styles['Heading2'],
         fontSize=12,
-        spaceBefore=10,
+        spaceAfter=8,
+        spaceBefore=12,
+        textColor=black,
+        fontName='Helvetica-Bold',
+        keepWithNext=True
+    ))
+    
+    # Clause style (for numbered items)
+    styles.add(ParagraphStyle(
+        name='Clause',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceAfter=6,
+        spaceBefore=3,
+        leftIndent=20,
+        fontName='Helvetica'
+    ))
+    
+    # Sub-clause style (for sub-items)
+    styles.add(ParagraphStyle(
+        name='SubClause',
+        parent=styles['Normal'],
+        fontSize=10,
         spaceAfter=4,
-        alignment=TA_LEFT,
-        textColor='black',
-        fontName='Helvetica-Bold',
-        leftIndent=24
-    )
-    
-    # Sub-minor heading (Level 4)
-    heading4_style = ParagraphStyle(
-        'CustomHeading4',
-        parent=styles['Normal'],
-        fontSize=11,
-        spaceBefore=8,
-        spaceAfter=3,
-        alignment=TA_LEFT,
-        textColor='black',
-        fontName='Helvetica-Bold',
-        leftIndent=36
-    )
-    
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceBefore=3,
-        spaceAfter=3,
-        alignment=TA_JUSTIFY,
-        textColor='black',
-        leftIndent=0
-    )
-    
-    bullet_style = ParagraphStyle(
-        'CustomBullet',
-        parent=styles['Normal'],
-        fontSize=10,
         spaceBefore=2,
-        spaceAfter=2,
-        leftIndent=24,
-        alignment=TA_JUSTIFY,
-        textColor='black'
-    )
+        leftIndent=40,
+        fontName='Helvetica'
+    ))
     
-    # Indented content styles for different levels
-    content1_style = ParagraphStyle(
-        'CustomContent1',
+    # Definition style
+    styles.add(ParagraphStyle(
+        name='Definition',
         parent=styles['Normal'],
         fontSize=10,
+        spaceAfter=6,
         spaceBefore=3,
-        spaceAfter=3,
-        alignment=TA_JUSTIFY,
-        textColor='black',
-        leftIndent=12
-    )
+        leftIndent=30,
+        fontName='Helvetica',
+        textColor=black
+    ))
     
-    content2_style = ParagraphStyle(
-        'CustomContent2',
+    # Body text style
+    styles.add(ParagraphStyle(
+        name='BodyText',
         parent=styles['Normal'],
         fontSize=10,
-        spaceBefore=3,
-        spaceAfter=3,
+        spaceAfter=6,
         alignment=TA_JUSTIFY,
-        textColor='black',
-        leftIndent=24
-    )
+        fontName='Helvetica'
+    ))
     
-    content3_style = ParagraphStyle(
-        'CustomContent3',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceBefore=3,
-        spaceAfter=3,
-        alignment=TA_JUSTIFY,
-        textColor='black',
-        leftIndent=36
-    )
-    
-    return {
-        'title': title_style,
-        'heading1': heading1_style,
-        'heading2': heading2_style,
-        'heading3': heading3_style,
-        'heading4': heading4_style,
-        'normal': normal_style,
-        'bullet': bullet_style,
-        'content1': content1_style,
-        'content2': content2_style,
-        'content3': content3_style
-    }
+    return styles
 
-def detect_header_level_and_type(line):
-    """
-    Detect if a line is a header and return its level and type
-    Returns: (is_header, level, header_type, clean_text)
-    """
-    line = line.strip()
-    if not line:
-        return False, 0, None, line
-    
-    # Pattern 1: Numbered headers (1., 2., 1.1, 1.2, etc.)
-    numbered_pattern = r'^(\d+(?:\.\d+)*)\.\s+(.+)$'
-    match = re.match(numbered_pattern, line)
-    if match:
-        number_part = match.group(1)
-        text_part = match.group(2).strip()
-        level = number_part.count('.') + 1
-        return True, level, 'numbered', f"<b>{number_part}. {text_part}</b>"
-    
-    # Pattern 2: Roman numerals (I., II., III., etc.)
-    roman_pattern = r'^([IVX]+)\.\s+(.+)$'
-    match = re.match(roman_pattern, line)
-    if match:
-        roman_part = match.group(1)
-        text_part = match.group(2).strip()
-        return True, 1, 'roman', f"<b>{roman_part}. {text_part}</b>"
-    
-    # Pattern 3: Letter headers (a), b), c), etc.)
-    letter_pattern = r'^([a-z])\)\s+(.+)$'
-    match = re.match(letter_pattern, line)
-    if match:
-        letter_part = match.group(1)
-        text_part = match.group(2).strip()
-        return True, 3, 'letter', f"<b>{letter_part}) {text_part}</b>"
-    
-    # Pattern 4: Parenthetical numbers ((1), (2), etc.)
-    paren_pattern = r'^\((\d+)\)\s+(.+)$'
-    match = re.match(paren_pattern, line)
-    if match:
-        num_part = match.group(1)
-        text_part = match.group(2).strip()
-        return True, 4, 'parenthetical', f"<b>({num_part}) {text_part}</b>"
-    
-    # Pattern 5: All caps lines (likely headers)
-    if line.isupper() and len(line.split()) <= 10 and not line.endswith('.'):
-        return True, 1, 'caps', f"<b>{line}</b>"
-    
-    # Pattern 6: Lines ending with colon (section headers)
-    if line.endswith(':') and len(line.split()) <= 8:
-        clean_text = line[:-1].strip()
-        return True, 2, 'colon', f"<b>{clean_text}:</b>"
-    
-    # Pattern 7: Bold text patterns (**text**)
-    bold_pattern = r'^\*\*(.+?)\*\*:?\s*$'
-    match = re.match(bold_pattern, line)
-    if match:
-        text_part = match.group(1).strip()
-        return True, 2, 'bold', f"<b>{text_part}</b>"
-    
-    # Pattern 8: Title case lines with specific characteristics
-    if (line.istitle() and 
-        len(line.split()) <= 8 and 
-        not line.endswith('.') and 
-        not any(char in line for char in ['(', ')', '"', "'"])):
-        return True, 2, 'title', f"<b>{line}</b>"
-    
-    return False, 0, None, line
-
-def parse_markdown_to_pdf_elements(text, styles):
-    elements = []
-    lines = text.split('\n')
-    current_section_level = 0
+def parse_summary_content(summary_text):
+    """Parse the summary text and identify different content types"""
+    lines = summary_text.split('\n')
+    parsed_content = []
     
     for line in lines:
-        original_line = line
         line = line.strip()
-        
-        # Skip empty lines
         if not line:
-            elements.append(Spacer(1, 6))
             continue
-        
-        # Detect headers
-        is_header, level, header_type, formatted_text = detect_header_level_and_type(line)
-        
-        if is_header:
-            current_section_level = level
             
-            # Choose appropriate style based on level
-            if level == 1:
-                style = styles['heading1']
-            elif level == 2:
-                style = styles['heading2']
-            elif level == 3:
-                style = styles['heading3']
-            else:
-                style = styles['heading4']
-            
-            elements.append(Paragraph(formatted_text, style))
-            continue
-        
-        # Handle bullet points and lists
-        if line.startswith('- ') or line.startswith('• '):
-            bullet_text = line[2:].strip()
-            # Convert any remaining bold markers
-            bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
-            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-            continue
-        
-        if line.startswith('* '):
-            bullet_text = line[2:].strip()
-            bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
-            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-            continue
-        
-        # Handle numbered lists that aren't headers
-        if re.match(r'^\d+\.\s', line) and not detect_header_level_and_type(line)[0]:
-            list_text = re.sub(r'^\d+\.\s', '', line)
-            list_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', list_text)
-            elements.append(Paragraph(f"• {list_text}", styles['bullet']))
-            continue
-        
-        # Regular content - choose indentation based on current section level
-        content_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
-        
-        if current_section_level == 1:
-            style = styles['content1']
-        elif current_section_level == 2:
-            style = styles['content2']
-        elif current_section_level >= 3:
-            style = styles['content3']
+        # Identify content type based on patterns
+        if re.match(r'^[A-Z\s]+:?\s*$', line) and len(line) > 10:
+            # Main heading (all caps)
+            parsed_content.append(('main_heading', line))
+        elif re.match(r'^\d+\.', line):
+            # Numbered clause
+            parsed_content.append(('clause', line))
+        elif re.match(r'^[a-z]\)', line) or re.match(r'^\([a-z]\)', line):
+            # Sub-clause with letter
+            parsed_content.append(('sub_clause', line))
+        elif re.match(r'^\s*-\s*Definition:', line) or 'Definition:' in line:
+            # Definition
+            parsed_content.append(('definition', line))
+        elif re.match(r'^[A-Z][^:]*:', line):
+            # Sub heading (starts with capital, has colon)
+            parsed_content.append(('sub_heading', line))
+        elif line.startswith('•') or line.startswith('-'):
+            # Bullet point
+            parsed_content.append(('sub_clause', line))
         else:
-            style = styles['normal']
-        
-        elements.append(Paragraph(content_text, style))
+            # Regular body text
+            parsed_content.append(('body_text', line))
     
-    return elements
+    return parsed_content
 
-def generate_pdf(summary_text):
+def create_header_footer(canvas, doc):
+    """Create header and footer for each page"""
+    canvas.saveState()
+    
+    # Header
+    canvas.setFont('Helvetica-Bold', 10)
+    canvas.setFillColor(darkblue)
+    canvas.drawString(72, doc.height + 50, "IRDAI Regulatory Document Summary")
+    canvas.drawRightString(doc.width + 72, doc.height + 50, 
+                          f"Generated on {datetime.now().strftime('%d-%m-%Y')}")
+    
+    # Header line
+    canvas.setStrokeColor(grey)
+    canvas.setLineWidth(0.5)
+    canvas.line(72, doc.height + 40, doc.width + 72, doc.height + 40)
+    
+    # Footer
+    canvas.setFont('Helvetica', 8)
+    canvas.setFillColor(grey)
+    canvas.drawCentredText(doc.width/2 + 72, 30, 
+                           f"Page {canvas.getPageNumber()}")
+    
+    # Footer line
+    canvas.line(72, 50, doc.width + 72, 50)
+    
+    canvas.restoreState()
+
+def generate_summary_pdf(summary_text, original_filename="document"):
+    """Generate a well-formatted PDF from the LLM summary"""
+    
+    # Create a BytesIO buffer
     buffer = BytesIO()
+    
+    # Create the PDF document
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
         rightMargin=72,
         leftMargin=72,
-        topMargin=72,
+        topMargin=100,
         bottomMargin=72
     )
     
-    styles = create_pdf_styles()
+    # Get custom styles
+    styles = create_custom_styles()
     
+    # Story list to hold all content
     story = []
     
-    # Add title if the document starts with a clear title
-    lines = summary_text.split('\n')
-    if lines and lines[0].strip() and not detect_header_level_and_type(lines[0].strip())[0]:
-        first_line = lines[0].strip()
-        if len(first_line.split()) <= 12 and first_line.isupper():
-            story.append(Paragraph(f"<b>{first_line}</b>", styles['title']))
+    # Add title page
+    story.append(Paragraph("REGULATORY DOCUMENT SUMMARY", styles['CustomTitle']))
+    story.append(Spacer(1, 20))
+    
+    # Add document info
+    doc_info = f"""
+    <b>Original Document:</b> {original_filename}<br/>
+    <b>Summary Generated:</b> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}<br/>
+    <b>Processing Method:</b> AI-Powered Legal Analysis<br/>
+    <b>Summary Type:</b> Clause-Preserving Structural Summary
+    """
+    story.append(Paragraph(doc_info, styles['BodyText']))
+    story.append(Spacer(1, 30))
+    
+    # Add separator line
+    story.append(Paragraph("_" * 80, styles['BodyText']))
+    story.append(Spacer(1, 20))
+    
+    # Parse and add the summary content
+    parsed_content = parse_summary_content(summary_text)
+    
+    for content_type, text in parsed_content:
+        if content_type == 'main_heading':
             story.append(Spacer(1, 12))
-            summary_text = '\n'.join(lines[1:])
+            story.append(Paragraph(text, styles['MainHeading']))
+        elif content_type == 'sub_heading':
+            story.append(Paragraph(text, styles['SubHeading']))
+        elif content_type == 'clause':
+            story.append(Paragraph(text, styles['Clause']))
+        elif content_type == 'sub_clause':
+            story.append(Paragraph(text, styles['SubClause']))
+        elif content_type == 'definition':
+            # Format definitions with special highlighting
+            formatted_text = text.replace('Definition:', '<b>Definition:</b>')
+            story.append(Paragraph(formatted_text, styles['Definition']))
+        else:
+            story.append(Paragraph(text, styles['BodyText']))
     
-    elements = parse_markdown_to_pdf_elements(summary_text, styles)
-    story.extend(elements)
+    # Add footer note
+    story.append(Spacer(1, 30))
+    story.append(Paragraph("_" * 80, styles['BodyText']))
+    story.append(Spacer(1, 10))
     
-    doc.build(story)
+    footer_note = """
+    <b>Disclaimer:</b> This summary has been generated using AI technology for regulatory compliance analysis. 
+    While every effort has been made to preserve the legal accuracy and structure of the original document, 
+    users should refer to the original regulatory text for authoritative legal interpretation.
+    """
+    story.append(Paragraph(footer_note, styles['BodyText']))
+    
+    # Build the PDF
+    doc.build(story, onFirstPage=create_header_footer, onLaterPages=create_header_footer)
+    
+    # Get the PDF data
     buffer.seek(0)
     return buffer
+
+def add_pdf_download_functionality():
+    """Add this function to your main Streamlit app after getting the summary"""
+    
+    # Add this after you get the summary from summarize_text_with_langchain
+    st.subheader("📄 Generate PDF Summary")
+    
+    if st.button("🔄 Generate Formatted PDF", type="primary"):
+        with st.spinner("Generating PDF summary..."):
+            try:
+                # Generate the PDF
+                pdf_buffer = generate_summary_pdf(
+                    final_summary,  # Your summary variable
+                    uploaded_file.name if uploaded_file else "regulatory_document"
+                )
+                
+                # Success message
+                st.success("✅ PDF generated successfully!")
+                
+                # Download button
+                st.download_button(
+                    label="📥 Download PDF Summary",
+                    data=pdf_buffer,
+                    file_name=f"summary_{uploaded_file.name.replace('.pdf', '')}_" + 
+                             f"{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                    mime="application/pdf",
+                    type="primary"
+                )
+                
+                # Show PDF info
+                pdf_buffer.seek(0, 2)  # Seek to end
+                pdf_size = pdf_buffer.tell()
+                st.info(f"📊 PDF Size: {pdf_size / 1024:.1f} KB")
+                
+            except Exception as e:
+                st.error(f"Error generating PDF: {str(e)}")
+                logger.error(f"PDF generation error: {e}")
 
 def clean_extracted_text(text):
     text = re.sub(r'\n\n--- Page \d+ ---\n', '\n\n', text)
@@ -561,39 +524,149 @@ def generate_download_filename(original_filename):
     name_without_ext = os.path.splitext(original_filename)[0]
     return f"{name_without_ext}_summary.pdf"
 
-if uploaded_file:
-    st.success("File uploaded successfully!")
-    english_text = ""
+if uploaded_file and llm:
+    st.header("📄 PDF Processing & Summarization")
     
     with pdfplumber.open(uploaded_file) as pdf:
-        for i, page in enumerate(pdf.pages, 1):
-            text = page.extract_text()
-            if text:
-                sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
-                english_sentences = [s for s in sentences if is_english(s)]
+        st.info(f"📖 Processing PDF with {len(pdf.pages)} pages")
+        
+        english_text = ""
+        page_count = 0
+        
+        for page in pdf.pages:
+            try:
+                text = page.extract_text()
+                if text and is_english(text):
+                    english_text += text + "\n"
+                    page_count += 1
+            except Exception as e:
+                logger.warning(f"Error extracting text from page: {e}")
+        
+        if english_text.strip():
+            st.success(f"✅ Extracted {len(english_text)} characters of English text from {page_count} pages")
+            
+            # Get summary from LLM
+            with st.spinner("🤖 Generating AI summary..."):
+                final_summary = summarize_text_with_langchain(english_text)
+            
+            # Display the summary
+            st.markdown("---")
+            st.header("📋 Generated Summary")
+            
+            # Show summary in expandable text area
+            with st.expander("📖 View Full Summary", expanded=True):
+                st.text_area("Summary Content", final_summary, height=400, key="summary_display")
+            
+            # Summary statistics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📊 Summary Length", f"{len(final_summary)} chars")
+            with col2:
+                st.metric("📉 Compression Ratio", f"{len(final_summary)/len(english_text):.1%}")
+            with col3:
+                st.metric("📄 Word Count", len(final_summary.split()))
+            
+            # PDF Generation Section
+            st.markdown("---")
+            st.header("📥 Download Options")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("📄 PDF Summary")
+                if st.button("🔄 Generate Formatted PDF", type="primary", key="generate_pdf"):
+                    with st.spinner("Creating beautifully formatted PDF..."):
+                        try:
+                            # Generate the PDF
+                            pdf_buffer = generate_summary_pdf(
+                                final_summary,
+                                uploaded_file.name
+                            )
+                            
+                            # Success message
+                            st.success("✅ PDF generated successfully!")
+                            
+                            # Download button
+                            st.download_button(
+                                label="📥 Download PDF Summary",
+                                data=pdf_buffer,
+                                file_name=f"summary_{uploaded_file.name.replace('.pdf', '')}_" + 
+                                         f"{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                mime="application/pdf",
+                                type="primary",
+                                key="download_pdf"
+                            )
+                            
+                            # Show PDF info
+                            pdf_buffer.seek(0, 2)  # Seek to end
+                            pdf_size = pdf_buffer.tell()
+                            st.info(f"📊 PDF Size: {pdf_size / 1024:.1f} KB")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error generating PDF: {str(e)}")
+                            logger.error(f"PDF generation error: {e}")
+            
+            with col2:
+                st.subheader("📝 Text Summary")
+                st.download_button(
+                    label="📥 Download Text Summary",
+                    data=final_summary,
+                    file_name=f"summary_{uploaded_file.name.replace('.pdf', '')}_" + 
+                             f"{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                    mime="text/plain",
+                    type="secondary",
+                    key="download_txt"
+                )
                 
-                if english_sentences:
-                    english_text += f"\n\n--- Page {i} ---\n" + ".".join(english_sentences) + "."
-                else:
-                    st.warning(f"Skipping non-English Page {i}")
+                # Also provide original extracted text
+                st.download_button(
+                    label="📥 Download Extracted Text",
+                    data=english_text,
+                    file_name=f"extracted_{uploaded_file.name.replace('.pdf', '')}_" + 
+                             f"{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                    mime="text/plain",
+                    key="download_original"
+                )
+            
+        else:
+            st.warning("⚠️ No English text found in the uploaded PDF.")
+            st.info("Please ensure the PDF contains English text and is not image-based.")
+
+else:
+    # Show instructions when no file is uploaded or LLM not configured
+    if not uploaded_file:
+        st.info("👆 Please upload a PDF file to begin processing.")
     
-    if english_text.strip():
-        english_text = clean_extracted_text(english_text)
-        with st.spinner("Summarizing English content..."):
-            full_summary = summarize_text_with_langchain(english_text)
+    if not llm:
+        st.warning("⚙️ Please configure Azure OpenAI settings in the sidebar.")
         
-        st.subheader("Summary")
-        st.text_area("Preview", full_summary, height=500)
-        
-        pdf_file = generate_pdf(full_summary)
-        
-        download_filename = generate_download_filename(uploaded_file.name)
-        
-        st.download_button(
-            "Download Summary (PDF)", 
-            data=pdf_file, 
-            file_name=download_filename,
-            mime="application/pdf"
-        )
-    else:
-        st.error("No English content found in the uploaded PDF.")
+    # Show example of what the app can do
+    st.markdown("---")
+    st.header("🎯 What This App Does")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        ### 📤 Input
+        - **PDF Documents** (IRDAI regulations, circulars)
+        - **Multi-language support** (extracts English content)
+        - **Complex document structures**
+        """)
+    
+    with col2:
+        st.markdown("""
+        ### 📥 Output
+        - **Structured summaries** preserving legal clauses
+        - **Professional PDF reports** with formatting
+        - **Plain text summaries** for easy sharing
+        """)
+    
+    st.markdown("""
+    ### ✨ Key Features
+    - 🔍 **Smart text extraction** with header/footer filtering
+    - 🧠 **AI-powered summarization** using Azure OpenAI
+    - 📋 **Legal clause preservation** maintaining document structure
+    - 🎨 **Professional PDF formatting** with headers, styles, and branding
+    - 📊 **Processing transparency** showing chunks and progress
+    """)
