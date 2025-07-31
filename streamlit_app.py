@@ -186,7 +186,7 @@ if uploaded_file:
         with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
             messages = [
                 SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly."),
-                HumanMessage(content=get_summary_prompt(chunk, english_page_count))
+                HumanMessage(content=get_summary_prompt(chunk))
             ]
             response = llm(messages)
             full_summary += "\n\n" + response.content.strip()
