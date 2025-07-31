@@ -522,7 +522,7 @@ def parse_improved_markdown_to_pdf_elements(text, styles):
     
     return elements
 
-def generate_improved_pdf(summary_text, title="Document Summary"):
+def generate_pdf(summary_text, title="Document Summary"):
     """
     Generate PDF with improved formatting
     """
