@@ -248,6 +248,7 @@ def summarize_text_with_langchain(text):
     return "\n\n".join(summaries)
 
 def create_pdf_styles():
+    """Enhanced PDF styles with better spacing and hierarchy"""
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle(
@@ -255,16 +256,18 @@ def create_pdf_styles():
         parent=styles['Title'],
         fontSize=18,
         spaceAfter=20,
+        spaceBefore=10,
         alignment=TA_CENTER,
-        textColor='black'
+        textColor='black',
+        fontName='Helvetica-Bold'
     )
     
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading1'],
         fontSize=14,
-        spaceBefore=12,
-        spaceAfter=6,
+        spaceBefore=15,
+        spaceAfter=8,
         alignment=TA_LEFT,
         textColor='black',
         fontName='Helvetica-Bold'
@@ -274,8 +277,8 @@ def create_pdf_styles():
         'CustomSubHeading',
         parent=styles['Heading2'],
         fontSize=12,
-        spaceBefore=10,
-        spaceAfter=5,
+        spaceBefore=12,
+        spaceAfter=6,
         alignment=TA_LEFT,
         textColor='black',
         fontName='Helvetica-Bold'
@@ -285,8 +288,8 @@ def create_pdf_styles():
         'CustomMinorHeading',
         parent=styles['Heading3'],
         fontSize=11,
-        spaceBefore=8,
-        spaceAfter=4,
+        spaceBefore=10,
+        spaceAfter=5,
         alignment=TA_LEFT,
         textColor='black',
         fontName='Helvetica-Bold'
@@ -296,19 +299,45 @@ def create_pdf_styles():
         'CustomNormal',
         parent=styles['Normal'],
         fontSize=10,
-        spaceBefore=3,
-        spaceAfter=3,
+        spaceBefore=4,
+        spaceAfter=4,
         alignment=TA_JUSTIFY,
-        textColor='black'
+        textColor='black',
+        leftIndent=0,
+        rightIndent=0
     )
     
     bullet_style = ParagraphStyle(
         'CustomBullet',
         parent=styles['Normal'],
         fontSize=10,
+        spaceBefore=3,
+        spaceAfter=3,
+        leftIndent=20,
+        bulletIndent=10,
+        alignment=TA_LEFT,
+        textColor='black'
+    )
+    
+    nested_bullet_style = ParagraphStyle(
+        'CustomNestedBullet',
+        parent=styles['Normal'],
+        fontSize=9,
         spaceBefore=2,
         spaceAfter=2,
-        leftIndent=20,
+        leftIndent=40,
+        bulletIndent=30,
+        alignment=TA_LEFT,
+        textColor='black'
+    )
+    
+    definition_style = ParagraphStyle(
+        'CustomDefinition',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=4,
+        spaceAfter=4,
+        leftIndent=15,
         alignment=TA_JUSTIFY,
         textColor='black'
     )
@@ -319,104 +348,216 @@ def create_pdf_styles():
         'subheading': subheading_style,
         'minor_heading': minor_heading_style,
         'normal': normal_style,
-        'bullet': bullet_style
+        'bullet': bullet_style,
+        'nested_bullet': nested_bullet_style,
+        'definition': definition_style
     }
 
+def detect_text_type(line):
+    """Improved text type detection with priority order"""
+    line_stripped = line.strip()
+    
+    # Skip empty lines
+    if not line_stripped:
+        return 'empty'
+    
+    # Check for numbered sections/clauses (highest priority)
+    if re.match(r'^\d+(\.\d+)*\.?\s+[A-Z]', line_stripped):
+        return 'numbered_heading'
+    
+    # Check for lettered sections (a), b), etc.)
+    if re.match(r'^[a-z]\)\s+', line_stripped) or re.match(r'^\([a-z]\)\s+', line_stripped):
+        return 'lettered_bullet'
+        
+    # Check for roman numerals
+    if re.match(r'^[ivx]+\)\s+', line_stripped, re.IGNORECASE) or re.match(r'^\([ivx]+\)\s+', line_stripped, re.IGNORECASE):
+        return 'roman_bullet'
+    
+    # Check for explicit markdown headers
+    if line_stripped.startswith('###'):
+        return 'h3'
+    elif line_stripped.startswith('##'):
+        return 'h2'
+    elif line_stripped.startswith('#'):
+        return 'h1'
+    
+    # Check for bold headings **Text**
+    if re.match(r'^\*\*[^*]+\*\*:?\s*$', line_stripped):
+        return 'bold_heading'
+    
+    # Check for ALL CAPS headings (likely section headers)
+    if line_stripped.isupper() and len(line_stripped.split()) <= 10 and not line_stripped.endswith('.'):
+        return 'caps_heading'
+    
+    # Check for Title Case headings ending with colon
+    if line_stripped.endswith(':') and line_stripped[:-1].istitle() and len(line_stripped.split()) <= 8:
+        return 'colon_heading'
+    
+    # Check for regular bullets
+    if line_stripped.startswith('- ') or line_stripped.startswith('• ') or line_stripped.startswith('* '):
+        return 'bullet'
+    
+    # Check for numbered lists
+    if re.match(r'^\d+\.\s+', line_stripped):
+        return 'numbered_bullet'
+    
+    # Check for definitions (Definition: Term - description)
+    if re.match(r'^[*_]?Definition[*_]?:?\s+[A-Z]', line_stripped, re.IGNORECASE):
+        return 'definition'
+    
+    # Check for table-like content
+    if '|' in line_stripped or re.search(r'\s{3,}', line_stripped):
+        return 'table_content'
+    
+    # Default to normal paragraph
+    return 'normal'
+
 def parse_markdown_to_pdf_elements(text, styles):
+    """Improved parsing with better text type detection and formatting"""
     elements = []
     lines = text.split('\n')
     
-    for line in lines:
-        line = line.strip()
-        if not line:
+    for i, line in enumerate(lines):
+        line = line.rstrip()  # Keep leading spaces for indentation detection
+        text_type = detect_text_type(line)
+        
+        if text_type == 'empty':
             elements.append(Spacer(1, 6))
             continue
         
-        if line.startswith('###'):
-            heading_text = line[3:].strip()
-            if heading_text:
-                elements.append(Paragraph(heading_text, styles['subheading']))
-                continue
+        # Clean the line for processing
+        clean_line = line.strip()
         
-        if line.startswith('##'):
-            heading_text = line[2:].strip()
-            if heading_text:
-                elements.append(Paragraph(heading_text, styles['minor_heading']))
-                continue
-        
-        if line.startswith('#'):
-            heading_text = line[1:].strip()
+        # Handle different text types
+        if text_type == 'h1':
+            heading_text = clean_line[1:].strip()
             if heading_text:
                 elements.append(Paragraph(heading_text, styles['heading']))
-                continue
-        
-        bold_match = re.match(r'^\*\*(.*?)\*\*:?\s*$', line)
-        if bold_match:
-            heading_text = bold_match.group(1).strip()
+                
+        elif text_type == 'h2':
+            heading_text = clean_line[2:].strip()
             if heading_text:
-                if ':' in line or len(heading_text.split()) <= 4:
-                    elements.append(Paragraph(heading_text, styles['heading']))
-                else:
-                    elements.append(Paragraph(heading_text, styles['subheading']))
-                continue
-        
-        if line.isupper() and len(line.split()) <= 8 and ':' in line:
-            elements.append(Paragraph(line, styles['heading']))
-            continue
-        
-        if line.endswith(':') and line.istitle() and len(line.split()) <= 6:
-            elements.append(Paragraph(line, styles['subheading']))
-            continue
-        
-        if line.startswith('- ') or line.startswith('• '):
-            bullet_text = line[2:].strip()
+                elements.append(Paragraph(heading_text, styles['subheading']))
+                
+        elif text_type == 'h3':
+            heading_text = clean_line[3:].strip()
+            if heading_text:
+                elements.append(Paragraph(heading_text, styles['minor_heading']))
+                
+        elif text_type == 'numbered_heading':
+            # For numbered sections like "3.2.1 Policy Revival"
+            elements.append(Paragraph(clean_line, styles['subheading']))
+            
+        elif text_type == 'bold_heading':
+            # Remove ** formatting and use as heading
+            heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', clean_line).strip(':')
+            elements.append(Paragraph(heading_text, styles['subheading']))
+            
+        elif text_type == 'caps_heading':
+            elements.append(Paragraph(clean_line, styles['heading']))
+            
+        elif text_type == 'colon_heading':
+            heading_text = clean_line.rstrip(':')
+            elements.append(Paragraph(heading_text, styles['minor_heading']))
+            
+        elif text_type in ['bullet', 'lettered_bullet', 'roman_bullet', 'numbered_bullet']:
+            # Handle different bullet types
+            if text_type == 'bullet':
+                bullet_text = clean_line[2:].strip()  # Remove '- ' or '• '
+                bullet_symbol = "•"
+            elif text_type == 'lettered_bullet':
+                bullet_text = re.sub(r'^[a-z]\)\s+', '', clean_line) or re.sub(r'^\([a-z]\)\s+', '', clean_line)
+                bullet_symbol = "◦"
+            elif text_type == 'roman_bullet':
+                bullet_text = re.sub(r'^[ivx]+\)\s+', '', clean_line, flags=re.IGNORECASE) or re.sub(r'^\([ivx]+\)\s+', '', clean_line, flags=re.IGNORECASE)
+                bullet_symbol = "▪"
+            else:  # numbered_bullet
+                bullet_text = re.sub(r'^\d+\.\s+', '', clean_line)
+                bullet_symbol = "•"
+            
+            # Handle bold text within bullets
             if '**' in bullet_text:
                 bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
-            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-            continue
-        
-        if line.startswith('* '):
-            bullet_text = line[2:].strip()
-            if '**' in bullet_text:
-                bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
-            elements.append(Paragraph(f"• {bullet_text}", styles['bullet']))
-            continue
-        
-        if re.match(r'^\d+\.\s', line):
-            list_text = re.sub(r'^\d+\.\s', '', line)
-            if '**' in list_text:
-                list_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', list_text)
-            elements.append(Paragraph(f"• {list_text}", styles['bullet']))
-            continue
-        
-        if '**' in line:
-            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
-            elements.append(Paragraph(formatted_line, styles['normal']))
-            continue
-        
-        elements.append(Paragraph(line, styles['normal']))
+            
+            # Determine indentation level
+            indent_level = len(line) - len(line.lstrip())
+            if indent_level > 10 or text_type in ['lettered_bullet', 'roman_bullet']:
+                style_to_use = styles['nested_bullet']
+            else:
+                style_to_use = styles['bullet']
+                
+            elements.append(Paragraph(f"{bullet_symbol} {bullet_text}", style_to_use))
+            
+        elif text_type == 'definition':
+            # Special formatting for definitions
+            if '**' in clean_line:
+                definition_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', clean_line)
+            else:
+                definition_text = clean_line
+            elements.append(Paragraph(definition_text, styles['definition']))
+            
+        elif text_type == 'table_content':
+            # Simple table handling - could be enhanced further
+            elements.append(Paragraph(clean_line, styles['normal']))
+            
+        else:  # normal text
+            # Handle bold text formatting
+            if '**' in clean_line:
+                formatted_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', clean_line)
+            else:
+                formatted_text = clean_line
+                
+            elements.append(Paragraph(formatted_text, styles['normal']))
     
     return elements
 
 def generate_pdf(summary_text):
+    """Enhanced PDF generation with better page handling"""
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=72,
-        leftMargin=72,
-        topMargin=72,
-        bottomMargin=72
+        rightMargin=60,
+        leftMargin=60,
+        topMargin=60,
+        bottomMargin=60
     )
     
     styles = create_pdf_styles()
     
     story = []
     
+    # Add title if the summary starts with a clear title
+    lines = summary_text.split('\n')
+    first_significant_line = next((line.strip() for line in lines if line.strip()), "Document Summary")
+    
+    # If first line looks like a title, use it
+    if (first_significant_line.isupper() or 
+        'NOTIFICATION' in first_significant_line.upper() or 
+        'REGULATION' in first_significant_line.upper()):
+        story.append(Paragraph(first_significant_line, styles['title']))
+        story.append(Spacer(1, 20))
+        # Remove the title from the main text
+        summary_text = '\n'.join(lines[1:])
+    
+    # Parse and add main content
     elements = parse_markdown_to_pdf_elements(summary_text, styles)
     story.extend(elements)
     
-    doc.build(story)
+    # Build the PDF
+    try:
+        doc.build(story)
+    except Exception as e:
+        # Fallback: if there's an issue, create a simpler version
+        story = [Paragraph("Document Summary", styles['title']), Spacer(1, 20)]
+        # Split into simple paragraphs
+        for line in summary_text.split('\n'):
+            if line.strip():
+                story.append(Paragraph(line.strip(), styles['normal']))
+            else:
+                story.append(Spacer(1, 6))
+        doc.build(story)
+    
     buffer.seek(0)
     return buffer
 
