@@ -196,7 +196,7 @@ Your task is to generate a **legally precise, clause-preserving, structure-align
 ---
  
 ### SUMMARY LENGTH RULE:
-- Ensure total summary length is approx. **50% of English content pages** (~{page_count} pages).
+- Ensure total summary length is approx. **50% of English content pages).
  
 ---
  
