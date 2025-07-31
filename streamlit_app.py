@@ -5,25 +5,10 @@ from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
-from reportlab.pdfgen import canvas
+from fpdf import FPDF
 from io import BytesIO
 import re
 import logging
-from datetime import datetime
-import textwrap
-from fpdf import FPDF
-
-# NEW IMPORTS FOR DOCX FUNCTIONALITY
-from docx import Document
-from docx.shared import Inches, Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.style import WD_STYLE_TYPE
-from docx.oxml.shared import OxmlElement, qn
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -206,7 +191,7 @@ Your task is to generate a **legally precise, clause-preserving, structure-align
 ---
  
 ### SUMMARY LENGTH RULE:
-- Ensure total summary length is approx. **50% of English content pages).
+- Ensure total summary length is approx. **50% of English content pages**.
  
 ---
  
@@ -257,125 +242,311 @@ def summarize_text_with_langchain(text):
     progress_bar.empty()
     return "\n\n".join(summaries)
 
-def create_pdf_with_fpdf(summary_text, original_filename=None):
-    """Generate PDF using FPDF - Simple and fast"""
-    
-    class PDFDoc(FPDF):
-        def header(self):
-            self.set_font('Arial', 'B', 16)
-            self.cell(0, 10, 'Regulatory Document Summary', 0, 1, 'C')
-            self.ln(5)
+class CustomFPDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.set_auto_page_break(auto=True, margin=15)
         
-        def footer(self):
-            self.set_y(-15)
-            self.set_font('Arial', 'I', 8)
-            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+    def header(self):
+        # Optional: Add header if needed
+        pass
+        
+    def footer(self):
+        # Add page number at the bottom
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(128)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+def clean_text_for_pdf(text):
+    """Clean text to handle encoding issues with FPDF"""
+    # Replace problematic characters
+    text = text.replace('₹', 'Rs.')
+    text = text.replace(''', "'")
+    text = text.replace(''', "'")
+    text = text.replace('"', '"')
+    text = text.replace('"', '"')
+    text = text.replace('–', '-')
+    text = text.replace('—', '-')
+    text = text.replace('…', '...')
     
-    pdf = PDFDoc()
-    pdf.add_page()
+    # Remove or replace other problematic unicode characters
+    text = text.encode('latin-1', 'ignore').decode('latin-1')
     
-    # Add metadata
-    pdf.set_font('Arial', '', 10)
-    if original_filename:
-        pdf.cell(0, 8, f'Original Document: {original_filename}', 0, 1)
-    pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%B %d, %Y")}', 0, 1)
-    pdf.ln(10)
+    return text
+
+def parse_and_format_text(pdf, text):
+    """Parse text and add formatted content to PDF"""
+    lines = text.split('\n')
     
-    # Process content
-    lines = summary_text.split('\n')
     for line in lines:
         line = line.strip()
         if not line:
-            pdf.ln(3)
+            pdf.ln(3)  # Small line break for empty lines
             continue
-            
-        if line.upper().startswith(('CHAPTER', 'SECTION', 'PART')):
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 8, line, 0, 1)
-        elif line.startswith('*Definition:'):
-            pdf.set_font('Arial', 'B', 10)
-            wrapped = textwrap.wrap(line, width=80)
-            for wrapped_line in wrapped:
-                pdf.cell(0, 6, wrapped_line, 0, 1)
-        else:
-            pdf.set_font('Arial', '', 10)
-            wrapped = textwrap.wrap(line, width=80)
-            for wrapped_line in wrapped:
-                pdf.cell(0, 6, wrapped_line, 0, 1)
-    
-    return pdf.output(dest='S').encode('latin1')
-
-if uploaded_file is not None and llm is not None:
-    st.header("📄 PDF Document Summarizer")
-    
-    # Extract text from PDF
-    with st.spinner("Extracting text from PDF..."):
-        text_content = ""
-        with pdfplumber.open(uploaded_file) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    lines = page_text.split('\n')
-                    for line in lines:
-                        if line.strip() and is_english(line):
-                            text_content += line + '\n'
-    
-    if text_content.strip():
-        st.success(f"✅ Successfully extracted {len(text_content)} characters of English text")
         
-        # Generate summary
-        if st.button("🚀 Generate Summary", type="primary"):
-            with st.spinner("Generating AI summary... This may take a few minutes."):
-                try:
-                    summary = summarize_text_with_langchain(text_content)
+        line = clean_text_for_pdf(line)
+        
+        # Check for different heading levels and formats
+        if line.startswith('###'):
+            # Sub-subheading
+            heading_text = line[3:].strip()
+            if heading_text:
+                pdf.ln(5)
+                pdf.set_font('Arial', 'B', 11)
+                pdf.set_text_color(0, 0, 0)
+                pdf.cell(0, 8, heading_text, 0, 1, 'L')
+                pdf.ln(2)
+                continue
+        
+        elif line.startswith('##'):
+            # Subheading
+            heading_text = line[2:].strip()
+            if heading_text:
+                pdf.ln(6)
+                pdf.set_font('Arial', 'B', 12)
+                pdf.set_text_color(0, 0, 0)
+                pdf.cell(0, 8, heading_text, 0, 1, 'L')
+                pdf.ln(3)
+                continue
+        
+        elif line.startswith('#'):
+            # Main heading
+            heading_text = line[1:].strip()
+            if heading_text:
+                pdf.ln(8)
+                pdf.set_font('Arial', 'B', 14)
+                pdf.set_text_color(0, 0, 0)
+                pdf.cell(0, 10, heading_text, 0, 1, 'L')
+                pdf.ln(4)
+                continue
+        
+        # Check for bold text patterns (markdown style)
+        bold_match = re.match(r'^\*\*(.*?)\*\*:?\s*$', line)
+        if bold_match:
+            heading_text = bold_match.group(1).strip()
+            if heading_text:
+                pdf.ln(4)
+                pdf.set_font('Arial', 'B', 11)
+                pdf.set_text_color(0, 0, 0)
+                pdf.cell(0, 7, heading_text, 0, 1, 'L')
+                pdf.ln(2)
+                continue
+        
+        # Check for lines that end with colon (likely headings)
+        if line.endswith(':') and len(line.split()) <= 8:
+            pdf.ln(4)
+            pdf.set_font('Arial', 'B', 10)
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(0, 6, line, 0, 1, 'L')
+            pdf.ln(2)
+            continue
+        
+        # Check for bullet points
+        if line.startswith('- ') or line.startswith('• ') or line.startswith('* '):
+            bullet_text = line[2:].strip()
+            pdf.set_font('Arial', '', 9)
+            pdf.set_text_color(0, 0, 0)
+            
+            # Add bullet point with indentation
+            pdf.cell(10, 5, '•', 0, 0, 'L')
+            
+            # Handle long bullet text with multi-line
+            remaining_width = pdf.w - pdf.l_margin - pdf.r_margin - 10
+            if pdf.get_string_width(bullet_text) > remaining_width:
+                # Multi-line bullet point
+                words = bullet_text.split()
+                current_line = ""
+                first_line = True
+                
+                for word in words:
+                    test_line = current_line + " " + word if current_line else word
+                    if pdf.get_string_width(test_line) <= remaining_width:
+                        current_line = test_line
+                    else:
+                        if current_line:
+                            if first_line:
+                                pdf.cell(0, 5, current_line, 0, 1, 'L')
+                                first_line = False
+                            else:
+                                pdf.cell(10, 5, '', 0, 0, 'L')  # Indent continuation
+                                pdf.cell(0, 5, current_line, 0, 1, 'L')
+                            current_line = word
+                        else:
+                            # Word is too long, just add it
+                            if first_line:
+                                pdf.cell(0, 5, word, 0, 1, 'L')
+                                first_line = False
+                            else:
+                                pdf.cell(10, 5, '', 0, 0, 'L')
+                                pdf.cell(0, 5, word, 0, 1, 'L')
+                
+                if current_line:
+                    if first_line:
+                        pdf.cell(0, 5, current_line, 0, 1, 'L')
+                    else:
+                        pdf.cell(10, 5, '', 0, 0, 'L')
+                        pdf.cell(0, 5, current_line, 0, 1, 'L')
+            else:
+                pdf.cell(0, 5, bullet_text, 0, 1, 'L')
+            
+            pdf.ln(1)
+            continue
+        
+        # Check for numbered lists
+        if re.match(r'^\d+\.\s', line):
+            list_text = re.sub(r'^\d+\.\s', '', line)
+            pdf.set_font('Arial', '', 9)
+            pdf.set_text_color(0, 0, 0)
+            
+            # Get the number part
+            number_match = re.match(r'^(\d+)\.\s', line)
+            if number_match:
+                number = number_match.group(1) + ". "
+                pdf.cell(15, 5, number, 0, 0, 'L')
+                
+                # Handle long list text with multi-line
+                remaining_width = pdf.w - pdf.l_margin - pdf.r_margin - 15
+                if pdf.get_string_width(list_text) > remaining_width:
+                    # Multi-line list item
+                    words = list_text.split()
+                    current_line = ""
+                    first_line = True
                     
-                    # Display the summary
-                    st.subheader("📝 Generated Summary")
-                    st.text_area("Summary", summary, height=400, disabled=True)
+                    for word in words:
+                        test_line = current_line + " " + word if current_line else word
+                        if pdf.get_string_width(test_line) <= remaining_width:
+                            current_line = test_line
+                        else:
+                            if current_line:
+                                if first_line:
+                                    pdf.cell(0, 5, current_line, 0, 1, 'L')
+                                    first_line = False
+                                else:
+                                    pdf.cell(15, 5, '', 0, 0, 'L')  # Indent continuation
+                                    pdf.cell(0, 5, current_line, 0, 1, 'L')
+                                current_line = word
+                            else:
+                                if first_line:
+                                    pdf.cell(0, 5, word, 0, 1, 'L')
+                                    first_line = False
+                                else:
+                                    pdf.cell(15, 5, '', 0, 0, 'L')
+                                    pdf.cell(0, 5, word, 0, 1, 'L')
                     
-                    # Create download options
-                    st.subheader("📥 Download Options")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col2:
-                        st.write("**PDF Format**")
-                        
-                        # PDF method selection
-                        pdf_method = st.selectbox(
-                            "PDF Method:",
-                            ["WeasyPrint (Professional)", "FPDF (Simple)"],
-                            key="pdf_method"
-                        )
-                        
-                        if st.button("Generate PDF", key="gen_pdf"):
-                            with st.spinner("Creating PDF..."):
-                                try:
-                                    if pdf_method == "WeasyPrint (Professional)":
-                                        pdf_bytes = create_pdf_with_weasyprint(summary, uploaded_file.name)
-                                    else:
-                                        pdf_bytes = create_pdf_with_fpdf(summary, uploaded_file.name)
-                                    
-                                    pdf_filename = f"summary_{uploaded_file.name.replace('.pdf', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                                    
-                                    st.download_button(
-                                        label="📄 Download PDF",
-                                        data=pdf_bytes,
-                                        file_name=pdf_filename,
-                                        mime="application/pdf",
-                                        key="download_pdf"
-                                    )
-                                    
-                                    st.success("✅ PDF generated successfully!")
-                                    
-                                except Exception as e:
-                                    st.error(f"PDF generation error: {str(e)}")
-                                    st.info("Try installing: pip install weasyprint")
-                    
-                    st.success("✅ Summary generated successfully!")
-                    
-                except Exception as e:
-                    st.error(f"Error generating summary: {str(e)}")
-                    logger.error(f"Summary generation error: {str(e)}")
+                    if current_line:
+                        if first_line:
+                            pdf.cell(0, 5, current_line, 0, 1, 'L')
+                        else:
+                            pdf.cell(15, 5, '', 0, 0, 'L')
+                            pdf.cell(0, 5, current_line, 0, 1, 'L')
+                else:
+                    pdf.cell(0, 5, list_text, 0, 1, 'L')
+            
+            pdf.ln(1)
+            continue
+        
+        # Regular paragraph text
+        pdf.set_font('Arial', '', 9)
+        pdf.set_text_color(0, 0, 0)
+        
+        # Handle long paragraphs with multi-line
+        available_width = pdf.w - pdf.l_margin - pdf.r_margin
+        if pdf.get_string_width(line) > available_width:
+            # Multi-line paragraph
+            words = line.split()
+            current_line = ""
+            
+            for word in words:
+                test_line = current_line + " " + word if current_line else word
+                if pdf.get_string_width(test_line) <= available_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        pdf.cell(0, 5, current_line, 0, 1, 'L')
+                        current_line = word
+                    else:
+                        # Word is too long, just add it
+                        pdf.cell(0, 5, word, 0, 1, 'L')
+            
+            if current_line:
+                pdf.cell(0, 5, current_line, 0, 1, 'L')
+        else:
+            pdf.cell(0, 5, line, 0, 1, 'L')
+        
+        pdf.ln(2)
+
+def generate_pdf(summary_text):
+    """Generate PDF using FPDF"""
+    pdf = CustomFPDF()
+    pdf.add_page()
+    
+    # Set title
+    pdf.set_font('Arial', 'B', 16)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 15, 'Document Summary', 0, 1, 'C')
+    pdf.ln(10)
+    
+    # Parse and add formatted content
+    parse_and_format_text(pdf, summary_text)
+    
+    # Create BytesIO buffer and save PDF
+    buffer = BytesIO()
+    pdf_string = pdf.output(dest='S').encode('latin-1')
+    buffer.write(pdf_string)
+    buffer.seek(0)
+    
+    return buffer
+
+def clean_extracted_text(text):
+    text = re.sub(r'\n\n--- Page \d+ ---\n', '\n\n', text)
+    text = re.sub(r'--- Page \d+ ---', '', text)
+    
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
+def generate_download_filename(original_filename):
+    name_without_ext = os.path.splitext(original_filename)[0]
+    return f"{name_without_ext}_summary.pdf"
+
+if uploaded_file:
+    st.success("File uploaded successfully!")
+    english_text = ""
+    
+    with pdfplumber.open(uploaded_file) as pdf:
+        for i, page in enumerate(pdf.pages, 1):
+            text = page.extract_text()
+            if text:
+                sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
+                english_sentences = [s for s in sentences if is_english(s)]
+                
+                if english_sentences:
+                    english_text += f"\n\n--- Page {i} ---\n" + ".".join(english_sentences) + "."
+                else:
+                    st.warning(f"Skipping non-English Page {i}")
+    
+    if english_text.strip():
+        english_text = clean_extracted_text(english_text)
+        with st.spinner("Summarizing English content..."):
+            full_summary = summarize_text_with_langchain(english_text)
+        
+        st.subheader("Summary")
+        st.text_area("Preview", full_summary, height=500)
+        
+        try:
+            pdf_file = generate_pdf(full_summary)
+            
+            download_filename = generate_download_filename(uploaded_file.name)
+            
+            st.download_button(
+                "Download Summary (PDF)", 
+                data=pdf_file, 
+                file_name=download_filename,
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"Error generating PDF: {str(e)}")
+            st.info("You can still copy the summary text above.")
     else:
-        st.error("❌ No English text could be extracted from the PDF")
+        st.error("No English content found in the uploaded PDF.")
