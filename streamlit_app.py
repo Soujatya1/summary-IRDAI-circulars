@@ -42,83 +42,82 @@ def detect_english_sentences(text):
     """
     Extract English sentences and numeric content from the given text
     """
-    # Normalize whitespace and preserve paragraph breaks
-    text = re.sub(r'\n\s*\n', ' |PARA_BREAK| ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
+    # Improved splitting that preserves numbered sections and subsections
+    # This regex is more careful about splitting - it won't split on periods that are part of numbering
+    # Pattern explanation:
+    # - Looks for sentence endings (. ! ?) followed by whitespace
+    # - But NOT if preceded by a single digit and period (like "2.1")
+    # - And NOT if followed immediately by a digit (like "2.1")
+    sentence_endings = r'(?<!\d\.)[.!?]+\s+(?!\d)'
     
-    # Split on sentence boundaries, but preserve numbered sections
-    # Pattern: sentence endings (. ! ?) followed by space, but not after single digits
-    sentence_pattern = r'(?<!\b\d)[.!?]+\s+(?=[A-Z]|\d+\.|\|PARA_BREAK\||$)'
+    # Also split on double newlines to separate paragraphs/sections
+    text = re.sub(r'\n\s*\n', ' PARAGRAPH_BREAK ', text)
     
-    # Split text into potential sentences
-    segments = re.split(sentence_pattern, text)
+    potential_sentences = re.split(sentence_endings, text)
     
-    # Further process paragraph breaks
-    processed_segments = []
-    for segment in segments:
-        if '|PARA_BREAK|' in segment:
-            parts = [p.strip() for p in segment.split('|PARA_BREAK|') if p.strip()]
-            processed_segments.extend(parts)
+    # Further split on paragraph breaks
+    expanded_sentences = []
+    for sentence in potential_sentences:
+        if 'PARAGRAPH_BREAK' in sentence:
+            parts = sentence.split('PARAGRAPH_BREAK')
+            expanded_sentences.extend([part.strip() for part in parts if part.strip()])
         else:
-            processed_segments.append(segment.strip())
+            expanded_sentences.append(sentence)
+    
+    potential_sentences = expanded_sentences
     
     english_sentences = []
     
-    for segment in processed_segments:
-        if not segment or len(segment) < 3:
+    for sentence in potential_sentences:
+        sentence = sentence.strip()
+        
+        # Skip very short sentences (likely fragments) unless they contain section numbers
+        if len(sentence) < 5:
             continue
         
-        # Count different types of content
-        english_chars = len(re.findall(r'[a-zA-Z]', segment))
-        digits = len(re.findall(r'[0-9]', segment))
-        total_chars = len(re.sub(r'\s+', '', segment))
+        # Special handling for section/subsection headers (like "2.1", "Background 2.1.")
+        section_pattern = r'^\d+\.?\d*\.?\s*[A-Za-z]|^[A-Za-z][^.]*\d+\.?\d*'
+        is_section_header = re.match(section_pattern, sentence)
         
-        # Check for section headers (like "2.1 Background" or "Chapter 3")
-        is_section_header = bool(re.match(r'^\d+\.?\d*\.?\s*[A-Za-z]|^[A-Za-z][^.]*\s+\d+\.?\d*', segment))
+        # Check if sentence contains meaningful English content OR significant numeric content
+        english_chars = len(re.findall(r'[a-zA-Z]', sentence))
+        numeric_chars = len(re.findall(r'[0-9]', sentence))
+        total_meaningful_chars = english_chars + numeric_chars
+        total_chars = len(re.sub(r'\s', '', sentence))
         
-        # Check for reference patterns to exclude (like IRDAI/E&C/ORD/MISC/115/09/2024)
-        reference_patterns = [
-            r'(?i)ref\.?\s*[:\-]?\s*[A-Z]+[/\\][A-Z&]+[/\\][A-Z]+[/\\][A-Z]+[/\\]\d+[/\\]\d+[/\\]\d{4}',  # IRDAI/E&C/ORD/MISC/115/09/2024
-            r'(?i)[A-Z]{2,}[/\\][A-Z&]{2,}[/\\][A-Z]{2,}[/\\][A-Z]{2,}[/\\]\d+[/\\]\d+[/\\]\d{4}',       # General pattern
-            r'(?i)[A-Z]{3,}[/\\-][A-Z&/\\-]+[/\\-]\d+[/\\-]\d+[/\\-]\d{4}',                              # Variations with dashes
-            r'(?i)^[A-Z]+[/\\][A-Z&]+.*\d+[/\\]\d+[/\\]\d{4}
-        ]
+        # Modified condition: Accept if has English letters OR significant numbers OR is section header
+        has_enough_english = english_chars >= 3  # Reduced for section headers
+        has_significant_numbers = numeric_chars >= 2  # Reduced threshold
         
-        # Decision logic - Skip reference patterns
-        should_include = False
+        # Accept section headers even if short
+        if is_section_header:
+            english_sentences.append(sentence)
+            continue
         
-        # Skip if it's a reference pattern
-        if is_reference_pattern:
-            should_include = False
-        
-        # Always include section headers (unless they're reference patterns)
-        elif is_section_header:
-            should_include = True
-        
-        # Include if has sufficient English content
-        elif english_chars >= 5:
-            try:
-                # Try language detection for English text
-                detected_lang = detect(segment)
+        # Skip if neither English nor numeric content is sufficient
+        if not (has_enough_english or has_significant_numbers):
+            continue
+            
+        try:
+            # For sentences with mixed content (English + numbers), check language
+            if english_chars > 0:
+                detected_lang = detect(sentence)
                 if detected_lang == "en":
-                    should_include = True
-            except:
-                # Fallback: if mostly English characters, assume English
-                if total_chars > 0 and (english_chars / total_chars) > 0.3:
-                    should_include = True
-        
-        # Include if has meaningful numeric content (even without English)
-        elif has_meaningful_numbers and digits >= 2:
-            should_include = True
-        
-        # Include mixed content (English + numbers)
-        elif english_chars >= 3 and digits >= 2:
-            meaningful_content = english_chars + digits
-            if total_chars > 0 and (meaningful_content / total_chars) > 0.4:
-                should_include = True
-        
-        if should_include:
-            english_sentences.append(segment)
+                    english_sentences.append(sentence)
+                else:
+                    # If language detection fails but has English chars + numbers, use heuristic
+                    if total_chars > 0 and (total_meaningful_chars / total_chars) > 0.5:
+                        english_sentences.append(sentence)
+            else:
+                # For purely numeric content, check if it looks like meaningful data
+                # (contains structured numbers, currency, percentages, etc.)
+                if re.search(r'[\d,]+\.?\d*[%₹$]?|[\d,]+[-/]\d+|\d+\.\d+|\d{4,}', sentence):
+                    english_sentences.append(sentence)
+                    
+        except Exception as e:
+            # If detection fails, use heuristic for mixed English/numeric content
+            if total_chars > 0 and (total_meaningful_chars / total_chars) > 0.5:
+                english_sentences.append(sentence)
     
     return english_sentences
 
