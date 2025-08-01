@@ -186,10 +186,6 @@ if uploaded_file:
                 except:
                     pass
     
-    if english_text_count == 0:
-        st.error("No English paragraphs detected in the document.")
-        st.stop()
-    
     st.success(f"Total pages: {total_page_count} | English paragraphs: {english_text_count}")
     
     splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
