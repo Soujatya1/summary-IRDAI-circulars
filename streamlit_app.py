@@ -192,7 +192,7 @@ if uploaded_file:
     chunks = splitter.split_text(english_text)
     print(chunks)
     
-    st.info(f"Summarizing {english_page_count} English paragraphs across {len(chunks)} chunks...")
+    #st.info(f"Summarizing {english_page_count} English paragraphs across {len(chunks)} chunks...")
     
     full_summary = ""
     for i, chunk in enumerate(chunks):
