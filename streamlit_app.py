@@ -38,86 +38,89 @@ with st.sidebar:
         index=0
     )
 
+import re
+from langdetect import detect
+
 def detect_english_sentences(text):
     """
     Extract English sentences and numeric content from the given text
     """
-    # Improved splitting that preserves numbered sections and subsections
-    # This regex is more careful about splitting - it won't split on periods that are part of numbering
-    # Pattern explanation:
-    # - Looks for sentence endings (. ! ?) followed by whitespace
-    # - But NOT if preceded by a single digit and period (like "2.1")
-    # - And NOT if followed immediately by a digit (like "2.1")
-    sentence_endings = r'(?<!\d\.)[.!?]+\s+(?!\d)'
+    # Normalize whitespace and preserve paragraph breaks
+    text = re.sub(r'\n\s*\n', ' |PARA_BREAK| ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
     
-    # Also split on double newlines to separate paragraphs/sections
-    text = re.sub(r'\n\s*\n', ' PARAGRAPH_BREAK ', text)
+    # Split on sentence boundaries, but preserve numbered sections
+    # Pattern: sentence endings (. ! ?) followed by space, but not after single digits
+    sentence_pattern = r'(?<!\b\d)[.!?]+\s+(?=[A-Z]|\d+\.|\|PARA_BREAK\||$)'
     
-    potential_sentences = re.split(sentence_endings, text)
+    # Split text into potential sentences
+    segments = re.split(sentence_pattern, text)
     
-    # Further split on paragraph breaks
-    expanded_sentences = []
-    for sentence in potential_sentences:
-        if 'PARAGRAPH_BREAK' in sentence:
-            parts = sentence.split('PARAGRAPH_BREAK')
-            expanded_sentences.extend([part.strip() for part in parts if part.strip()])
+    # Further process paragraph breaks
+    processed_segments = []
+    for segment in segments:
+        if '|PARA_BREAK|' in segment:
+            parts = [p.strip() for p in segment.split('|PARA_BREAK|') if p.strip()]
+            processed_segments.extend(parts)
         else:
-            expanded_sentences.append(sentence)
-    
-    potential_sentences = expanded_sentences
+            processed_segments.append(segment.strip())
     
     english_sentences = []
     
-    for sentence in potential_sentences:
-        sentence = sentence.strip()
-        
-        # Skip very short sentences (likely fragments) unless they contain section numbers
-        if len(sentence) < 5:
+    for segment in processed_segments:
+        if not segment or len(segment) < 3:
             continue
         
-        # Special handling for section/subsection headers (like "2.1", "Background 2.1.")
-        section_pattern = r'^\d+\.?\d*\.?\s*[A-Za-z]|^[A-Za-z][^.]*\d+\.?\d*'
-        is_section_header = re.match(section_pattern, sentence)
+        # Count different types of content
+        english_chars = len(re.findall(r'[a-zA-Z]', segment))
+        digits = len(re.findall(r'[0-9]', segment))
+        total_chars = len(re.sub(r'\s+', '', segment))
         
-        # Check if sentence contains meaningful English content OR significant numeric content
-        english_chars = len(re.findall(r'[a-zA-Z]', sentence))
-        numeric_chars = len(re.findall(r'[0-9]', sentence))
-        total_meaningful_chars = english_chars + numeric_chars
-        total_chars = len(re.sub(r'\s', '', sentence))
+        # Check for section headers (like "2.1 Background" or "Chapter 3")
+        is_section_header = bool(re.match(r'^\d+\.?\d*\.?\s*[A-Za-z]|^[A-Za-z][^.]*\s+\d+\.?\d*', segment))
         
-        # Modified condition: Accept if has English letters OR significant numbers OR is section header
-        has_enough_english = english_chars >= 3  # Reduced for section headers
-        has_significant_numbers = numeric_chars >= 2  # Reduced threshold
+        # Check for meaningful numeric content (dates, currencies, percentages, etc.)
+        has_meaningful_numbers = bool(re.search(
+            r'\d{4}[-/]\d{1,2}[-/]\d{1,2}|'  # dates
+            r'[\$₹€£¥]\s*\d+|'               # currency
+            r'\d+\.?\d*\s*[%°]|'             # percentages/degrees
+            r'\d+,\d+|'                      # comma-separated numbers
+            r'\d+\.\d+|'                     # decimals
+            r'\b\d{4,}\b',                   # large numbers (years, ids, etc.)
+            segment
+        ))
         
-        # Accept section headers even if short
+        # Decision logic
+        should_include = False
+        
+        # Always include section headers
         if is_section_header:
-            english_sentences.append(sentence)
-            continue
+            should_include = True
         
-        # Skip if neither English nor numeric content is sufficient
-        if not (has_enough_english or has_significant_numbers):
-            continue
-            
-        try:
-            # For sentences with mixed content (English + numbers), check language
-            if english_chars > 0:
-                detected_lang = detect(sentence)
+        # Include if has sufficient English content
+        elif english_chars >= 5:
+            try:
+                # Try language detection for English text
+                detected_lang = detect(segment)
                 if detected_lang == "en":
-                    english_sentences.append(sentence)
-                else:
-                    # If language detection fails but has English chars + numbers, use heuristic
-                    if total_chars > 0 and (total_meaningful_chars / total_chars) > 0.5:
-                        english_sentences.append(sentence)
-            else:
-                # For purely numeric content, check if it looks like meaningful data
-                # (contains structured numbers, currency, percentages, etc.)
-                if re.search(r'[\d,]+\.?\d*[%₹$]?|[\d,]+[-/]\d+|\d+\.\d+|\d{4,}', sentence):
-                    english_sentences.append(sentence)
-                    
-        except Exception as e:
-            # If detection fails, use heuristic for mixed English/numeric content
-            if total_chars > 0 and (total_meaningful_chars / total_chars) > 0.5:
-                english_sentences.append(sentence)
+                    should_include = True
+            except:
+                # Fallback: if mostly English characters, assume English
+                if total_chars > 0 and (english_chars / total_chars) > 0.3:
+                    should_include = True
+        
+        # Include if has meaningful numeric content (even without English)
+        elif has_meaningful_numbers and digits >= 2:
+            should_include = True
+        
+        # Include mixed content (English + numbers)
+        elif english_chars >= 3 and digits >= 2:
+            meaningful_content = english_chars + digits
+            if total_chars > 0 and (meaningful_content / total_chars) > 0.4:
+                should_include = True
+        
+        if should_include:
+            english_sentences.append(segment)
     
     return english_sentences
 
