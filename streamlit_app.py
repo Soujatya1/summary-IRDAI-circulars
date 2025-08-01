@@ -186,7 +186,7 @@ if uploaded_file:
                 except:
                     pass
     
-    if english_text_count = 0:
+    if english_text_count == 0:
         st.error("No English paragraphs detected in the document.")
         st.stop()
     
