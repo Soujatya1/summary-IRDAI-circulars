@@ -38,13 +38,34 @@ with st.sidebar:
         index=0
     )
 
+def extract_numbering_patterns(text):
+    """
+    Extract and identify various numbering patterns from the text
+    """
+    patterns = {
+        'section_numbers': r'\b(\d+\.\d+(?:\.\d+)*)\s*[:\-\.]?\s*([A-Z][^.]*?)(?=\n|\d+\.\d+|$)',
+        'clause_numbers': r'\b(\d+\.\d+(?:\.\d+)*)\s*(.+?)(?=\n\d+\.\d+|\n[A-Z]|\n$)',
+        'sub_clauses': r'\b([a-z]\)|[ivx]+\)|[IVX]+\)|\([a-z]\)|\([ivx]+\)|\([IVX]+\))\s*(.+?)(?=\n[a-z]\)|\n[ivx]+\)|\n[IVX]+\)|\n\([a-z]\)|\n\([ivx]+\)|\n\([IVX]+\)|\n$)',
+        'bullet_points': r'^\s*[•\-\*]\s*(.+?)(?=\n\s*[•\-\*]|\n[A-Z]|\n\d+\.|\n$)',
+        'numbered_lists': r'^\s*(\d+)\.\s*(.+?)(?=\n\s*\d+\.|\n[A-Z]|\n$)',
+        'alphabetic_lists': r'^\s*([A-Za-z])\.\s*(.+?)(?=\n\s*[A-Za-z]\.|\n[A-Z]|\n\d+\.|\n$)'
+    }
+    
+    found_patterns = {}
+    for pattern_name, pattern in patterns.items():
+        matches = re.findall(pattern, text, re.MULTILINE | re.DOTALL)
+        if matches:
+            found_patterns[pattern_name] = matches
+    
+    return found_patterns
+
 def detect_english_sentences(text):
     """
-    Extract only English sentences from the given text
+    Extract only English sentences from the given text while preserving numbering
     """
     # Split text into sentences using multiple delimiters
     # This regex splits on periods, exclamation marks, question marks, and newlines
-    # while trying to preserve sentence structure
+    # while trying to preserve sentence structure and numbering
     sentence_endings = r'[.!?]+\s*'
     potential_sentences = re.split(sentence_endings, text)
     
@@ -53,12 +74,12 @@ def detect_english_sentences(text):
     for sentence in potential_sentences:
         sentence = sentence.strip()
         
-        # Skip very short sentences (likely fragments)
-        if len(sentence) < 10:
+        # Skip very short sentences (likely fragments) unless they contain numbering
+        if len(sentence) < 10 and not re.search(r'\b\d+\.\d*|\([a-z]\)|\b[ivx]+\)', sentence):
             continue
             
-        # Skip sentences that are mostly numbers or special characters
-        if len(re.sub(r'[^a-zA-Z]', '', sentence)) < 5:
+        # Skip sentences that are mostly numbers or special characters unless they're part of structured content
+        if len(re.sub(r'[^a-zA-Z]', '', sentence)) < 5 and not re.search(r'\b\d+\.\d*|\([a-z]\)|\b[ivx]+\)', sentence):
             continue
             
         try:
@@ -70,18 +91,19 @@ def detect_english_sentences(text):
                 
         except Exception as e:
             # If detection fails, try a simple heuristic
-            # Check if sentence contains mostly English characters
+            # Check if sentence contains mostly English characters or structured numbering
             english_chars = len(re.findall(r'[a-zA-Z]', sentence))
             total_chars = len(re.sub(r'\s', '', sentence))
+            has_numbering = bool(re.search(r'\b\d+\.\d*|\([a-z]\)|\b[ivx]+\)', sentence))
             
-            if total_chars > 0 and (english_chars / total_chars) > 0.7:
+            if total_chars > 0 and ((english_chars / total_chars) > 0.7 or has_numbering):
                 english_sentences.append(sentence)
     
     return english_sentences
 
 def extract_english_content_sentence_level(doc):
     """
-    Extract English content at sentence level from PDF document
+    Extract English content at sentence level from PDF document while preserving structure
     """
     english_text = ""
     english_sentence_count = 0
@@ -99,7 +121,7 @@ def extract_english_content_sentence_level(doc):
                 pages_with_english += 1
                 english_sentence_count += len(english_sentences)
                 
-                # Join sentences with proper spacing
+                # Join sentences with proper spacing while preserving structure
                 page_english_text = '. '.join(english_sentences)
                 
                 # Add page separator for better context
@@ -128,75 +150,99 @@ def get_summary_prompt(text):
     return f"""
 You are acting as a **Senior Legal Analyst** and Regulatory Compliance Officer specializing in IRDAI, UIDAI, and eGazette circulars.
  
-Your task is to generate a **legally precise, clause-preserving, structure-aligned summary** of the in-put regulatory document. Your summary will be reviewed for legal compliance, so accuracy is critical.
+Your task is to generate a **legally precise, clause-preserving, structure-aligned summary** of the input regulatory document. Your summary will be reviewed for legal compliance, so accuracy is critical.
 
 Use clean plain text.
 Do not use Markdown formatting (no **bold**, `code`, or extra spacing).
 
 ---
  
-### LEGAL SUMMARIZATION RULES
+### CRITICAL NUMBERING PRESERVATION RULES
  
-**1. STRUCTURE PRESERVATION (Strict Order):**
-- Retain **original structure**, including:
-  - Section headers, subheaders, and sub-subheaders
-  - Clause numbers (e.g., 3.2.1, a), b), c))
-  - Bullet f-ormats, indentation levels
-- Do not reorder, combine, or rename any sections or sub-sections.
+**1. EXACT NUMBERING RETENTION (MANDATORY):**
+- **NEVER change, skip, or renumber** any section, clause, or sub-clause numbers
+- Preserve EXACT numbering as it appears in source: 
+  - If source shows "2.3.1", your summary MUST show "2.3.1"
+  - If source shows "a)", your summary MUST show "a)"
+  - If source shows "(i)", your summary MUST show "(i)"
+  - If source shows "Section 4.2.5", your summary MUST show "Section 4.2.5"
+- **Maintain hierarchical relationships**: If 2.1 comes before 2.2, preserve this order
+- **Never merge numbered items**: Each numbered clause gets its own summary line
+
+**2. STRUCTURE PRESERVATION (Strict Order):**
+- Retain **original structure** EXACTLY, including:
+  - Section headers with their original numbers (e.g., "3. POLICY CONDITIONS")
+  - Subheaders with numbers (e.g., "3.1 Revival Period", "3.2 Grace Period")
+  - Sub-subheaders (e.g., "3.2.1 Application Process", "3.2.2 Documentation")
+  - Clause numbers (e.g., 3.2.1, a), b), c), (i), (ii), (iii))
+  - Bullet formats, indentation levels
+- Do not reorder, combine, or rename any sections or sub-sections
+- If source document has gaps in numbering (e.g., goes from 2.1 to 2.3), preserve the gap
  
-**2. CLAUSE-BY-CLAUSE SUMMARIZATION (NO MERGING):**
-- **Summarize one clause per bullet/sentence only.**
-- If a clause is broken across lines or pages, **treat it as a single clause**.
-- Do not combine adjacent points even if they seem similar.
+**3. CLAUSE-BY-CLAUSE SUMMARIZATION (NO MERGING):**
+- **Summarize one numbered clause per line only**
+- **Each number gets its own summary line** - NEVER combine multiple numbered items
+- If a clause is broken across lines or pages, **treat it as a single numbered clause**
+- Example format:
+  - 2.1 [Summary of clause 2.1]
+  - 2.2 [Summary of clause 2.2]
+  - 2.2.1 [Summary of sub-clause 2.2.1]
+  - a) [Summary of point a]
+  - b) [Summary of point b]
  
-**3. PRESERVE LEGAL PHRASES & CAUSALITY TRIGGERS:**
+**4. PRESERVE LEGAL PHRASES & CAUSALITY TRIGGERS:**
 - Never skip or simplify phrases like:
   - **"unless"**, **"until"**, **"after"**, **"shall"**, **"subject to"**, **"provided that"**
-- These are **legally binding conditions** and must be **retained with their meaning intact**.
+  - **"notwithstanding"**, **"in accordance with"**, **"as per"**, **"pursuant to"**
+- These are **legally binding conditions** and must be **retained with their meaning intact**
  
-**4. DEFINITIONS & EXPLANATORY SECTIONS:**
-- If the section contains **definitions** or cl-assifications:
-  - List each term separately using this structure:  
-    - *Definition: Revival Period* – A policy may be revived within…
-  - **Do not merge multiple definitions** into one block.
+**5. DEFINITIONS & EXPLANATORY SECTIONS:**
+- If the section contains **definitions** or classifications:
+  - Preserve the section number and list each term with its number:
+    - 1.1 Definition: Revival Period – A policy may be revived within…
+    - 1.2 Definition: Grace Period – The period during which…
+  - **Do not merge multiple definitions** into one block
  
-**5. COMMITTEES, PANELS, AUTHORITIES (EXACT NAMES):**
-- Retain **every mention of committees and positions verbatim**.
+**6. COMMITTEES, PANELS, AUTHORITIES (EXACT NAMES):**
+- Retain **every mention of committees and positions verbatim**
 - Never shorten or generalize:
   - "Product Management Committee (PMC)" not "product committee"
   - "Chief Compliance Officer" not "Compliance Head"
   - "Member – Life", "Key Management Persons (KMPs)", "Appointed Actuary", etc.
-- Repeat full names every time they appear, even if already mentioned before.
+- Repeat full names every time they appear, even if already mentioned before
  
-**6. TABLES – PRESERVE IN FULL:**
-- Summarize **column-by-column**, row-by-row.
-- Do not omit any row (e.g., Discontinuance Charges for all policy years).
-- If summarizing:  
-  - *Table: Discontinuance Charges*  
+**7. TABLES – PRESERVE IN FULL WITH NUMBERING:**
+- If tables are numbered (e.g., "Table 2.1", "Annexure A"), retain these numbers
+- Summarize **column-by-column**, row-by-row with original structure
+- Do not omit any row (e.g., Discontinuance Charges for all policy years)
+- Example format:
+  - Table 2.1: Discontinuance Charges
     - Year 1: Lower of 2% or ₹3,000  
     - Year 2: Lower of 1.5% or ₹2,000  
     …
  
-**7. NUMERIC LIMITS & ABBREVIATIONS:**
+**8. NUMERIC LIMITS & ABBREVIATIONS:**
 - Maintain correct expressions like:
   - Rs. 1,000/- (not "Rs 1000")
   - "AP or FV, whichever is lower" (do not paraphrase this)
+- Preserve exact numerical references and their associated numbering
  
-**8. HISTORICAL & AUTHORITY CLAUSES:**
-- Include all clauses like:
-  - "Repeal and Savings"
-  - "Authority's power to issue clarifications"
-- Do **not skip final sections** even if repetitive.
+**9. HISTORICAL & AUTHORITY CLAUSES:**
+- Include all numbered clauses like:
+  - "5.1 Repeal and Savings"
+  - "6.2 Authority's power to issue clarifications"
+- Do **not skip final sections** even if repetitive - preserve their numbers
  
-**9. SIGNATURE, SEAL, PUBLICATION TEXT – OMIT:**
+**10. SIGNATURE, SEAL, PUBLICATION TEXT – OMIT:**
 - Strictly exclude:
   - Signature blocks (e.g., "Debasish Panda, Chairperson")
   - Digital signing metadata ("Digitally signed by Manoj Kumar Verma")
   - Footer/publication notices ("Uploaded by Dte. of Printing…")
  
-**10. LINE BREAKS & ORPHAN HANDLING:**
-- Do not treat broken lines (from PDF f-ormatting) as new clauses.
-- Ensure a single sentence broken across lines is still summarized as one thought.
+**11. LINE BREAKS & ORPHAN HANDLING:**
+- Do not treat broken lines (from PDF formatting) as new clauses
+- Ensure a single numbered sentence broken across lines is still summarized as one numbered thought
+- Maintain the original numbering even if text spans multiple lines
  
 ---
  
@@ -206,21 +252,24 @@ Do not use Markdown formatting (no **bold**, `code`, or extra spacing).
 - DO NOT use markdown headers like ## or ###
 - DO NOT use bold markers like **text** or __text__
 - DO NOT use italic markers like *text* or _text_
-- Use simple dashes (-) or bullet points (•) for lists
-- Preserve order and hierarchy from the source document in terms of numbering and serialization
+- Use simple dashes (-) or bullet points (•) for unnumbered lists only
+- **ALWAYS preserve original numbering** - this is the most critical requirement
 - Use CAPITAL LETTERS for emphasis instead of bold
 - Use line breaks and indentation for structure
-- Preserve order and hierarchy (e.g., 1 → a → i).
-- Do not invent or rename headings.
+- Preserve order and hierarchy with EXACT original numbers (e.g., 1.2.3 → a → i)
+- Do not invent or rename headings - keep original numbering and titles
  
 ---
  
 ### SUMMARY LENGTH RULE:
-- Ensure total summary length is approx. **50% of English content pages**.
+- Ensure total summary length is approx. **50% of English content pages**
  
 ---
+
+### CRITICAL REMINDER:
+The most important aspect of this summary is PRESERVING THE EXACT NUMBERING from the source document. Every section, clause, sub-clause, and point number must appear EXACTLY as it does in the original document. This is a legal requirement for regulatory compliance.
  
-Now begin the **section-wise clause-preserving summary** of the following legal document:
+Now begin the **section-wise clause-preserving summary** with **EXACT numbering retention** of the following legal document:
 --------------------
 {text}
 """
@@ -244,7 +293,7 @@ class UTF8PDF(FPDF):
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
     
     def clean_text(self, text):
-        """Clean text to remove problematic Unicode characters"""
+        """Clean text to remove problematic Unicode characters while preserving numbering"""
         # Define character replacements
         replacements = {
             '\u2019': "'",      # Right single quotation mark
@@ -268,13 +317,21 @@ class UTF8PDF(FPDF):
         for unicode_char, replacement in replacements.items():
             text = text.replace(unicode_char, replacement)
         
-        # Remove any remaining non-ASCII characters
+        # Remove any remaining non-ASCII characters but preserve numbers and basic punctuation
         try:
             text.encode('latin-1')
             return text
         except UnicodeEncodeError:
-            # If still problematic, keep only ASCII characters
-            return ''.join(char if ord(char) < 128 else '?' for char in text)
+            # If still problematic, keep ASCII characters and important symbols for numbering
+            cleaned = ''
+            for char in text:
+                if ord(char) < 128:
+                    cleaned += char
+                elif char in '().-':  # Important for numbering
+                    cleaned += char
+                else:
+                    cleaned += '?'
+            return cleaned
 
 def generate_pdf(summary_text):
     pdf = UTF8PDF()
@@ -286,10 +343,10 @@ def generate_pdf(summary_text):
     
     pdf.set_font('Arial', '', 11)  # Slightly smaller font for better fitting
     
-    # Clean the entire text first
+    # Clean the entire text first while preserving structure
     clean_text = pdf.clean_text(summary_text.strip())
     
-    # Split by lines to preserve exact structure
+    # Split by lines to preserve exact structure and numbering
     lines = clean_text.split('\n')
     
     for line in lines:
@@ -302,15 +359,19 @@ def generate_pdf(summary_text):
         if pdf.get_y() > pdf.h - 30:  # 30mm from bottom
             pdf.add_page()
         
-        # Handle long lines that need wrapping
+        # Handle long lines that need wrapping while preserving numbering at start
         words = line.split(' ')
         current_line = ''
+        
+        # Check if this line starts with numbering and preserve indentation
+        is_numbered = bool(re.match(r'^\s*(\d+\.(?:\d+\.)*|\([a-z]\)|\b[ivx]+\))', line.strip()))
+        indent = len(line) - len(line.lstrip()) if is_numbered else 0
         
         for word in words:
             test_line = current_line + ' ' + word if current_line else word
             
             # Check if the test line fits within margins
-            if pdf.get_string_width(test_line) <= (pdf.w - pdf.l_margin - pdf.r_margin):
+            if pdf.get_string_width(test_line) <= (pdf.w - pdf.l_margin - pdf.r_margin - indent):
                 current_line = test_line
             else:
                 # Print current line and start new line with current word
@@ -338,7 +399,29 @@ def generate_pdf(summary_text):
     buffer.seek(0)
     return buffer
 
+def remove_redundant_blocks(text):
+    """Remove redundant blocks while preserving numbering structure"""
+    lines = text.strip().split("\n")
+    cleaned = []
+    prev = ""
+    
+    for line in lines:
+        line_stripped = line.strip()
+        
+        # Always keep numbered lines even if they seem similar
+        if re.match(r'^\s*(\d+\.(?:\d+\.)*|\([a-z]\)|\b[ivx]+\))', line_stripped):
+            cleaned.append(line)
+        # For non-numbered lines, check for redundancy
+        elif line_stripped != prev.strip():
+            cleaned.append(line)
+        
+        prev = line
+    
+    return "\n".join(cleaned)
+
+# Streamlit UI
 st.set_page_config(layout="wide")
+st.title("IRDAI Circular Summarizer with Enhanced Numbering Retention")
 
 uploaded_file = st.file_uploader("Upload an IRDAI Circular PDF", type="pdf")
 
@@ -349,7 +432,7 @@ if uploaded_file:
     
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     
-    # Use sentence-level detection
+    # Use sentence-level detection with enhanced numbering preservation
     english_text, english_sentence_count, total_page_count, pages_with_english = extract_english_content_sentence_level(doc)
     
     if english_sentence_count == 0:
@@ -358,13 +441,26 @@ if uploaded_file:
 
     st.success(f"Total pages: {total_page_count} | Pages with English content: {pages_with_english} | English sentences extracted: {english_sentence_count}")
     
+    # Extract and display numbering patterns found
+    numbering_patterns = extract_numbering_patterns(english_text)
+    if numbering_patterns:
+        with st.expander("Detected Numbering Patterns"):
+            for pattern_type, matches in numbering_patterns.items():
+                st.write(f"**{pattern_type.replace('_', ' ').title()}:** {len(matches)} found")
+                if matches:
+                    st.write("Examples:", [match[0] if isinstance(match, tuple) else match for match in matches[:3]])
+    
     # Optional: Show a preview of extracted content
     with st.expander("Preview Extracted English Content"):
         st.text_area("Extracted English Text (first 2000 characters):", 
                     value=english_text[:2000] + "..." if len(english_text) > 2000 else english_text, 
                     height=200)
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=3500, 
+        chunk_overlap=100,  # Increased overlap to preserve numbering context
+        separators=["\n\n", "\n", ". ", " ", ""]  # Modified separators to better preserve structure
+    )
     chunks = splitter.split_text(english_text)
 
     st.info(f"Summarizing {english_sentence_count} English sentences across {len(chunks)} chunks...")
@@ -373,34 +469,46 @@ if uploaded_file:
     for i, chunk in enumerate(chunks):
         with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
             messages = [
-                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly."),
+                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly, especially numbering preservation."),
                 HumanMessage(content=get_summary_prompt(chunk))
             ]
             response = llm(messages)
-            full_summary += "\n\n" + response.content.strip()
+            chunk_summary = response.content.strip()
+            
+            # Add chunk separator only if there's meaningful content
+            if chunk_summary and not chunk_summary.isspace():
+                if full_summary:  # Add separator only if there's already content
+                    full_summary += "\n\n" + chunk_summary
+                else:
+                    full_summary = chunk_summary
 
-    # Rest of the code remains the same (deduplication, display, PDF generation)
-    def remove_redundant_blocks(text):
-        lines = text.strip().split("\n")
-        cleaned = []
-        prev = ""
-        for line in lines:
-            if line.strip() != prev.strip():
-                cleaned.append(line)
-            prev = line
-        return "\n".join(cleaned)
-
+    # Enhanced deduplication that preserves numbering
     full_summary = remove_redundant_blocks(full_summary)
 
     # Show summary
-    st.subheader("Section-wise Summary")
+    st.subheader("Section-wise Summary with Preserved Numbering")
     st.text_area("Generated Summary:", value=full_summary, height=600)
 
     # Download button for PDF
-    pdf_file = generate_pdf(full_summary)
-    st.download_button(
-        label="Download Summary as .pdf",
-        data=pdf_file,
-        file_name="irdai_summary.pdf",
-        mime="application/pdf"
-    )
+    if full_summary:
+        pdf_file = generate_pdf(full_summary)
+        if pdf_file:
+            st.download_button(
+                label="Download Summary as PDF",
+                data=pdf_file,
+                file_name="irdai_summary_with_numbering.pdf",
+                mime="application/pdf"
+            )
+    
+    # Additional validation section
+    with st.expander("Numbering Validation"):
+        original_numbers = re.findall(r'\b\d+\.\d+(?:\.\d+)*|\([a-z]\)|\b[ivx]+\)', english_text)
+        summary_numbers = re.findall(r'\b\d+\.\d+(?:\.\d+)*|\([a-z]\)|\b[ivx]+\)', full_summary)
+        
+        st.write(f"Original document numbering instances: {len(original_numbers)}")
+        st.write(f"Summary numbering instances: {len(summary_numbers)}")
+        
+        if len(summary_numbers) < len(original_numbers) * 0.7:  # If less than 70% retained
+            st.warning("Some numbering may have been lost during summarization. Consider reviewing the output.")
+        else:
+            st.success("Good numbering retention achieved!")
