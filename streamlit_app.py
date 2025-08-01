@@ -179,7 +179,7 @@ if uploaded_file:
                 if len(text_line.split()) < 1:
                     continue
                 try:
-                    lang = detect(paragraph)
+                    lang = detect(text_line)
                     if lang == "en":
                         english_text += "\n\n" + text_line
                         english_text_count += 1
