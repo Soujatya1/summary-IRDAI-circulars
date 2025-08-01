@@ -1,14 +1,13 @@
 import streamlit as st
-import fitz
+import fitz # PyMuPDF
 from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langdetect import detect
 from dotenv import load_dotenv
-from fpdf import FPDF
+from docx import Document
 from io import BytesIO
 import os
-import re
 
 with st.sidebar:
     st.header("🔧 Configuration")
@@ -37,174 +36,6 @@ with st.sidebar:
         ["2025-01-01-preview"],
         index=0
     )
-
-def detect_english_sentences(text):
-    """
-    Extract ONLY English sentences and numeric content from the given text
-    """
-    # Reference patterns to exclude
-    reference_patterns = [
-        r'(?i)ref\.?\s*[:\-]?\s*[A-Z]+[/\\][A-Z&]+[/\\][A-Z]+[/\\][A-Z]+[/\\]\d+[/\\]\d+[/\\]\d{4}',
-        r'(?i)[A-Z]{2,}[/\\][A-Z&]{2,}[/\\][A-Z]{2,}[/\\][A-Z]{2,}[/\\]\d+[/\\]\d+[/\\]\d{4}',
-        r'(?i)[A-Z]{3,}[/\\-][A-Z&/\\-]+[/\\-]\d+[/\\-]\d+[/\\-]\d{4}',
-        r'(?i)^[A-Z]+[/\\][A-Z&]+.*\d+[/\\]\d+[/\\]\d{4}$'
-    ]
-    
-    # Improved splitting that preserves numbered sections and subsections
-    sentence_endings = r'(?<!\d\.)[.!?]+\s+(?!\d)'
-    
-    # Also split on double newlines to separate paragraphs/sections
-    text = re.sub(r'\n\s*\n', ' PARAGRAPH_BREAK ', text)
-    
-    potential_sentences = re.split(sentence_endings, text)
-    
-    # Further split on paragraph breaks
-    expanded_sentences = []
-    for sentence in potential_sentences:
-        if 'PARAGRAPH_BREAK' in sentence:
-            parts = sentence.split('PARAGRAPH_BREAK')
-            expanded_sentences.extend([part.strip() for part in parts if part.strip()])
-        else:
-            expanded_sentences.append(sentence)
-    
-    potential_sentences = expanded_sentences
-    
-    english_sentences = []
-    
-    for sentence in potential_sentences:
-        sentence = sentence.strip()
-        
-        # Skip very short sentences
-        if len(sentence) < 5:
-            continue
-            
-        # Skip reference patterns immediately
-        if any(re.search(pattern, sentence) for pattern in reference_patterns):
-            continue
-        
-        # Count content types
-        english_chars = len(re.findall(r'[a-zA-Z]', sentence))
-        numeric_chars = len(re.findall(r'[0-9]', sentence))
-        total_chars = len(re.sub(r'\s', '', sentence))
-        
-        # Special handling for section/subsection headers
-        section_pattern = r'^\d+\.?\d*\.?\s*[A-Za-z]|^[A-Za-z][^.]*\d+\.?\d*'
-        is_section_header = re.match(section_pattern, sentence)
-        
-        # Check for meaningful numeric content (structured data)
-        has_meaningful_numbers = bool(re.search(
-            r'[\d,]+\.?\d*[%₹$€£¥]|'     # Currency, percentages
-            r'[\d,]+[-/]\d+|'            # Date-like patterns
-            r'\d+\.\d+|'                 # Decimals
-            r'\d{4,}|'                   # Large numbers (years, IDs)
-            r'\d+,\d+',                  # Comma-separated numbers
-            sentence
-        ))
-        
-        # Determine if we should include this sentence
-        should_include = False
-        
-        # Case 1: Pure numeric content (no English letters)
-        if english_chars == 0 and has_meaningful_numbers:
-            should_include = True
-            
-        # Case 2: Has English content - MUST verify it's English language
-        elif english_chars >= 3:
-            try:
-                detected_lang = detect(sentence)
-                if detected_lang == "en":
-                    should_include = True
-                # If not English, explicitly reject (no fallback heuristics)
-                else:
-                    should_include = False
-                    
-            except Exception:
-                # If language detection fails, be more conservative
-                # Only accept if it looks like English patterns
-                if is_english_like(sentence):
-                    should_include = True
-                else:
-                    should_include = False
-        
-        # Case 3: Section headers - still need to verify English
-        if is_section_header and english_chars > 0:
-            try:
-                # Extract just the text part for language detection
-                text_part = re.sub(r'^\d+\.?\d*\.?\s*', '', sentence)
-                if text_part:
-                    detected_lang = detect(text_part)
-                    if detected_lang != "en":
-                        should_include = False
-            except Exception:
-                if not is_english_like(sentence):
-                    should_include = False
-        
-        if should_include:
-            english_sentences.append(sentence)
-    
-    return english_sentences
-
-
-def is_english_like(text):
-    """
-    Heuristic to check if text looks like English when language detection fails
-    """
-    # Check for common English words
-    common_english_words = [
-        'the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
-        'from', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'have',
-        'has', 'had', 'will', 'would', 'could', 'should', 'may', 'might',
-        'this', 'that', 'these', 'those', 'it', 'they', 'we', 'you', 'he', 'she'
-    ]
-    
-    text_lower = text.lower()
-    english_word_count = sum(1 for word in common_english_words if word in text_lower)
-    
-    # If has common English words, likely English
-    if english_word_count >= 2:
-        return True
-    
-    # Check for English-like character patterns
-    # English uses more vowels and specific consonant patterns
-    vowels = len(re.findall(r'[aeiouAEIOU]', text))
-    consonants = len(re.findall(r'[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]', text))
-    
-    if vowels + consonants > 0:
-        vowel_ratio = vowels / (vowels + consonants)
-        # English typically has 35-45% vowels
-        if 0.25 <= vowel_ratio <= 0.55:
-            return True
-    
-    return False
-
-def extract_english_content_sentence_level(doc):
-    """
-    Extract English content at sentence level from PDF document
-    """
-    english_text = ""
-    english_sentence_count = 0
-    total_page_count = len(doc)
-    pages_with_english = 0
-    
-    for page_num, page in enumerate(doc):
-        page_text = page.get_text().strip()
-        
-        if page_text:
-            # Get English sentences from this page
-            english_sentences = detect_english_sentences(page_text)
-            
-            if english_sentences:
-                pages_with_english += 1
-                english_sentence_count += len(english_sentences)
-                
-                # Join sentences with proper spacing
-                page_english_text = '. '.join(english_sentences)
-                
-                # Add page separator for better context
-                english_text += f"\n\n--- Page {page_num + 1} ---\n"
-                english_text += page_english_text + ".\n"
-    
-    return english_text, english_sentence_count, total_page_count, pages_with_english
 
 def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
     try:
@@ -323,119 +154,7 @@ Now begin the **section-wise clause-preserving summary** of the following legal 
 {text}
 """
 
-class UTF8PDF(FPDF):
-    def __init__(self):
-        super().__init__()
-        self.add_page()
-        self.set_font('Arial', '', 12)
-    
-    def header(self):
-        # Only show header on first page
-        if self.page_no() == 1:
-            self.set_font('Arial', 'B', 16)
-            self.cell(0, 10, 'IRDAI Circular Summary', 0, 1, 'C')
-            self.ln(10)
-    
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', '', 8)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-    
-    def clean_text(self, text):
-        """Clean text to remove problematic Unicode characters"""
-        # Define character replacements
-        replacements = {
-            '\u2019': "'",      # Right single quotation mark
-            '\u2018': "'",      # Left single quotation mark
-            '\u201c': '"',      # Left double quotation mark
-            '\u201d': '"',      # Right double quotation mark
-            '\u2013': '-',      # En dash
-            '\u2014': '-',      # Em dash
-            '\u2026': '...',    # Horizontal ellipsis
-            '\u2022': '•',      # Bullet point
-            '\u20b9': 'Rs. ',   # Indian Rupee sign
-            '\u00a0': ' ',      # Non-breaking space
-            '\u2212': '-',      # Minus sign
-            '\u00b0': 'deg',    # Degree symbol
-            '\u00a9': '(c)',    # Copyright symbol
-            '\u00ae': '(r)',    # Registered trademark
-            '\u2122': 'TM',     # Trademark symbol
-        }
-        
-        # Apply replacements
-        for unicode_char, replacement in replacements.items():
-            text = text.replace(unicode_char, replacement)
-        
-        # Remove any remaining non-ASCII characters
-        try:
-            text.encode('latin-1')
-            return text
-        except UnicodeEncodeError:
-            # If still problematic, keep only ASCII characters
-            return ''.join(char if ord(char) < 128 else '?' for char in text)
-
-def generate_pdf(summary_text):
-    pdf = UTF8PDF()
-    
-    # Set margins
-    pdf.set_left_margin(20)
-    pdf.set_right_margin(20)
-    pdf.set_top_margin(30)
-    
-    pdf.set_font('Arial', '', 11)  # Slightly smaller font for better fitting
-    
-    # Clean the entire text first
-    clean_text = pdf.clean_text(summary_text.strip())
-    
-    # Split by lines to preserve exact structure
-    lines = clean_text.split('\n')
-    
-    for line in lines:
-        # Handle empty lines (preserve spacing)
-        if not line.strip():
-            pdf.ln(5)  # Add some vertical space for empty lines
-            continue
-        
-        # Check if line fits on current page, if not add new page
-        if pdf.get_y() > pdf.h - 30:  # 30mm from bottom
-            pdf.add_page()
-        
-        # Handle long lines that need wrapping
-        words = line.split(' ')
-        current_line = ''
-        
-        for word in words:
-            test_line = current_line + ' ' + word if current_line else word
-            
-            # Check if the test line fits within margins
-            if pdf.get_string_width(test_line) <= (pdf.w - pdf.l_margin - pdf.r_margin):
-                current_line = test_line
-            else:
-                # Print current line and start new line with current word
-                if current_line:
-                    pdf.cell(0, 5, current_line, 0, 1)
-                current_line = word
-        
-        # Print the remaining line
-        if current_line:
-            pdf.cell(0, 5, current_line, 0, 1)
-    
-    # Save to BytesIO buffer
-    buffer = BytesIO()
-    try:
-        pdf_output = pdf.output(dest='S')
-        if isinstance(pdf_output, str):
-            pdf_bytes = pdf_output.encode('latin-1')
-        else:
-            pdf_bytes = pdf_output
-        buffer.write(pdf_bytes)
-    except Exception as e:
-        st.error(f"Error generating PDF: {str(e)}")
-        return None
-    
-    buffer.seek(0)
-    return buffer
-
+# Streamlit UI
 st.set_page_config(layout="wide")
 
 uploaded_file = st.file_uploader("Upload an IRDAI Circular PDF", type="pdf")
@@ -446,38 +165,59 @@ if uploaded_file:
         st.stop()
     
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    english_text = ""
+    print(english_text)
+    english_paragraph_count = 0
+    total_page_count = len(doc)
     
-    # Use sentence-level detection
-    english_text, english_sentence_count, total_page_count, pages_with_english = extract_english_content_sentence_level(doc)
+    for page in doc:
+        page_text = page.get_text().strip()
+        print(page_text)
+        if page_text:
+            # Split page text into paragraphs
+            paragraphs = [p.strip() for p in page_text.split('\n\n') if p.strip()]
+            
+            for paragraph in paragraphs:
+                # Skip very short paragraphs (likely headers, page numbers, etc.)
+                if len(paragraph.split()) < 5:
+                    continue
+                    
+                try:
+                    lang = detect(paragraph)
+                    if lang == "en":
+                        english_text += "\n\n" + paragraph
+                        english_paragraph_count += 1
+                except:
+                    # If language detection fails, assume it might be English if it contains common English words
+                    common_english_words = ['the', 'and', 'or', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'for', 'with']
+                    paragraph_lower = paragraph.lower()
+                    if any(word in paragraph_lower for word in common_english_words):
+                        english_text += "\n\n" + paragraph
+                        english_paragraph_count += 1
     
-    if english_sentence_count == 0:
-        st.error("No English sentences detected in the document.")
+    if english_paragraph_count == 0:
+        st.error("No English paragraphs detected in the document.")
         st.stop()
-
-    st.success(f"Total pages: {total_page_count} | Pages with English content: {pages_with_english} | English sentences extracted: {english_sentence_count}")
     
-    # Optional: Show a preview of extracted content
-    with st.expander("Preview Extracted English Content"):
-        st.text_area("Extracted English Text (first 2000 characters):", 
-                    value=english_text[:2000] + "..." if len(english_text) > 2000 else english_text, 
-                    height=200)
-
+    st.success(f"Total pages: {total_page_count} | English paragraphs: {english_paragraph_count}")
+    
     splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
     chunks = splitter.split_text(english_text)
-
-    st.info(f"Summarizing {english_sentence_count} English sentences across {len(chunks)} chunks...")
-
+    print(chunks)
+    
+    st.info(f"Summarizing {english_paragraph_count} English paragraphs across {len(chunks)} chunks...")
+    
     full_summary = ""
     for i, chunk in enumerate(chunks):
         with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
             messages = [
                 SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly."),
-                HumanMessage(content=get_summary_prompt(chunk))
+                HumanMessage(content=get_summary_prompt(chunk, english_paragraph_count))
             ]
             response = llm(messages)
             full_summary += "\n\n" + response.content.strip()
-
-    # Rest of the code remains the same (deduplication, display, PDF generation)
+    
+    # Deduplication logic
     def remove_redundant_blocks(text):
         lines = text.strip().split("\n")
         cleaned = []
@@ -487,18 +227,113 @@ if uploaded_file:
                 cleaned.append(line)
             prev = line
         return "\n".join(cleaned)
-
+    
     full_summary = remove_redundant_blocks(full_summary)
-
+    
     # Show summary
     st.subheader("Section-wise Summary")
     st.text_area("Generated Summary:", value=full_summary, height=600)
-
+    
+    # Generate PDF instead of DOCX
+    def generate_pdf(summary_text):
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
+        
+        buffer = BytesIO()
+        
+        # Create the PDF document
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=18
+        )
+        
+        # Get styles and create custom styles
+        styles = getSampleStyleSheet()
+        
+        # Title style
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            textColor='black'
+        )
+        
+        # Body style
+        body_style = ParagraphStyle(
+            'CustomBody',
+            parent=styles['Normal'],
+            fontSize=11,
+            spaceAfter=12,
+            alignment=TA_JUSTIFY,
+            leftIndent=0,
+            rightIndent=0
+        )
+        
+        # Heading style for sections
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=12,
+            spaceBefore=20,
+            alignment=TA_LEFT,
+            textColor='black'
+        )
+        
+        # Build the document content
+        story = []
+        
+        # Add title
+        story.append(Paragraph("IRDAI Circular Summary", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Process the summary text
+        paragraphs = summary_text.strip().split("\n\n")
+        
+        for para in paragraphs:
+            clean_para = para.strip()
+            if clean_para:
+                # Check if it looks like a heading (short, possibly all caps, ends with colon, etc.)
+                if (len(clean_para) < 100 and 
+                    (clean_para.endswith(':') or 
+                     clean_para.isupper() or 
+                     any(word in clean_para.lower() for word in ['summary', 'overview', 'section', 'chapter']))):
+                    story.append(Paragraph(clean_para, heading_style))
+                else:
+                    # Regular paragraph
+                    story.append(Paragraph(clean_para, body_style))
+        
+        # Build the PDF
+        doc.build(story)
+        buffer.seek(0)
+        return buffer
+    
     # Download button for PDF
-    pdf_file = generate_pdf(full_summary)
-    st.download_button(
-        label="Download Summary as .pdf",
-        data=pdf_file,
-        file_name="irdai_summary.pdf",
-        mime="application/pdf"
-    )
+    try:
+        pdf_file = generate_pdf(full_summary)
+        st.download_button(
+            label="Download Summary as PDF",
+            data=pdf_file,
+            file_name="irdai_summary.pdf",
+            mime="application/pdf"
+        )
+    except ImportError:
+        st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
+    except Exception as e:
+        st.error(f"Error generating PDF: {str(e)}")
+        # Fallback to text file
+        st.download_button(
+            label="Download Summary as Text File",
+            data=full_summary,
+            file_name="irdai_summary.txt",
+            mime="text/plain"
+        )
