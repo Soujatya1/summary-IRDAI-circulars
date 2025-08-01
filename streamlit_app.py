@@ -453,7 +453,7 @@ if uploaded_file:
     # Optional: Show a preview of extracted content
     with st.expander("Preview Extracted English Content"):
         st.text_area("Extracted English Text (first 2000 characters):", 
-                    value=english_text[:2000] + "..." if len(english_text) > 2000 else english_text, 
+                    value=english_text[:10000] + "..." if len(english_text) > 10000 else english_text, 
                     height=200)
 
     splitter = RecursiveCharacterTextSplitter(
