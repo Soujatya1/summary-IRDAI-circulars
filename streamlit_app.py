@@ -167,45 +167,36 @@ if uploaded_file:
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     english_text = ""
     print(english_text)
-    english_paragraph_count = 0
+    english_text_count = 0
     total_page_count = len(doc)
     
     for page in doc:
         page_text = page.get_text().strip()
         print(page_text)
         if page_text:
-            # Split page text into paragraphs
-            paragraphs = [p.strip() for p in page_text.split('\n\n') if p.strip()]
-            
-            for paragraph in paragraphs:
-                # Skip very short paragraphs (likely headers, page numbers, etc.)
-                if len(paragraph.split()) < 5:
+            text_lines = [line.strip() for line in page_text.split('\n') if line.strip()]
+            for text_line in text_lines:
+                if len(text_line.split()) < 1:
                     continue
-                    
                 try:
                     lang = detect(paragraph)
                     if lang == "en":
-                        english_text += "\n\n" + paragraph
-                        english_paragraph_count += 1
+                        english_text += "\n\n" + text_line
+                        english_text_count += 1
                 except:
-                    # If language detection fails, assume it might be English if it contains common English words
-                    common_english_words = ['the', 'and', 'or', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'for', 'with']
-                    paragraph_lower = paragraph.lower()
-                    if any(word in paragraph_lower for word in common_english_words):
-                        english_text += "\n\n" + paragraph
-                        english_paragraph_count += 1
+                    pass
     
-    if english_paragraph_count == 0:
+    if english_text_count = 0:
         st.error("No English paragraphs detected in the document.")
         st.stop()
     
-    st.success(f"Total pages: {total_page_count} | English paragraphs: {english_paragraph_count}")
+    st.success(f"Total pages: {total_page_count} | English paragraphs: {english_text_count}")
     
     splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
     chunks = splitter.split_text(english_text)
     print(chunks)
     
-    st.info(f"Summarizing {english_paragraph_count} English paragraphs across {len(chunks)} chunks...")
+    st.info(f"Summarizing {english_page_count} English paragraphs across {len(chunks)} chunks...")
     
     full_summary = ""
     for i, chunk in enumerate(chunks):
