@@ -207,7 +207,7 @@ Do not use Markdown formatting (no **bold**, `code`, or extra spacing).
 - DO NOT use bold markers like **text** or __text__
 - DO NOT use italic markers like *text* or _text_
 - Use simple dashes (-) or bullet points (•) for lists
-- Preserve order and hierarchy using numbers and letters (1, a, i)
+- Preserve order and hierarchy from the source document in terms of numbering and serialization
 - Use CAPITAL LETTERS for emphasis instead of bold
 - Use line breaks and indentation for structure
 - Preserve order and hierarchy (e.g., 1 → a → i).
