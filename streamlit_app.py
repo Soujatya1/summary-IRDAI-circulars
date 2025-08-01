@@ -81,7 +81,7 @@ def detect_english_sentences(text):
             r'(?i)ref\.?\s*[:\-]?\s*[A-Z]+[/\\][A-Z&]+[/\\][A-Z]+[/\\][A-Z]+[/\\]\d+[/\\]\d+[/\\]\d{4}',  # IRDAI/E&C/ORD/MISC/115/09/2024
             r'(?i)[A-Z]{2,}[/\\][A-Z&]{2,}[/\\][A-Z]{2,}[/\\][A-Z]{2,}[/\\]\d+[/\\]\d+[/\\]\d{4}',       # General pattern
             r'(?i)[A-Z]{3,}[/\\-][A-Z&/\\-]+[/\\-]\d+[/\\-]\d+[/\\-]\d{4}',                              # Variations with dashes
-            r'(?i)^[A-Z]+[/\\][A-Z&]+.*\d+[/\\]\d+[/\\]\d{4}
+            r'(?i)^[A-Z]+[/\\][A-Z&]+.*\d+[/\\]\d+[/\\]\d{4}'
         ]
         
         # Decision logic - Skip reference patterns
