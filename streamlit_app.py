@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from docx import Document
 from io import BytesIO
 import os
+import re
 
 with st.sidebar:
     st.header("🔧 Configuration")
@@ -52,6 +53,25 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
         return None
 
 llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
+
+def remove_specific_text_pattern(text):
+    """
+    Remove the specific pattern: "Final Order – In the matter of M/s SBI Life Insurance Co. Ltd."
+    and its reference line "Ref: IRDAI/E&C;/ORD/MISC/115/09/2024"
+    """
+    # Pattern to match the specific text with variations in spacing and punctuation
+    pattern1 = r"Final\s+Order\s*[–-]\s*In\s+the\s+matter\s+of\s+M/s\s+SBI\s+Life\s+Insurance\s+Co\.\s+Ltd\."
+    pattern2 = r"Ref:\s*IRDAI/E&C;/ORD/MISC/115/09/2024"
+    
+    # Remove both patterns (case insensitive)
+    text = re.sub(pattern1, "", text, flags=re.IGNORECASE)
+    text = re.sub(pattern2, "", text, flags=re.IGNORECASE)
+    
+    # Clean up any extra whitespace or newlines left behind
+    text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)  # Replace multiple newlines with double newlines
+    text = text.strip()
+    
+    return text
 
 def get_summary_prompt(text):
     return f"""
@@ -185,6 +205,9 @@ if uploaded_file:
                         english_text_count += 1
                 except:
                     pass
+    
+    # Remove the specific text pattern after extracting all English text
+    english_text = remove_specific_text_pattern(english_text)
     
     st.success(f"Total pages: {total_page_count} | English paragraphs: {english_text_count}")
     
