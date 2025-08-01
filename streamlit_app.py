@@ -38,9 +38,6 @@ with st.sidebar:
         index=0
     )
 
-import re
-from langdetect import detect
-
 def detect_english_sentences(text):
     """
     Extract English sentences and numeric content from the given text
@@ -79,22 +76,23 @@ def detect_english_sentences(text):
         # Check for section headers (like "2.1 Background" or "Chapter 3")
         is_section_header = bool(re.match(r'^\d+\.?\d*\.?\s*[A-Za-z]|^[A-Za-z][^.]*\s+\d+\.?\d*', segment))
         
-        # Check for meaningful numeric content (dates, currencies, percentages, etc.)
-        has_meaningful_numbers = bool(re.search(
-            r'\d{4}[-/]\d{1,2}[-/]\d{1,2}|'  # dates
-            r'[\$₹€£¥]\s*\d+|'               # currency
-            r'\d+\.?\d*\s*[%°]|'             # percentages/degrees
-            r'\d+,\d+|'                      # comma-separated numbers
-            r'\d+\.\d+|'                     # decimals
-            r'\b\d{4,}\b',                   # large numbers (years, ids, etc.)
-            segment
-        ))
+        # Check for reference patterns to exclude (like IRDAI/E&C/ORD/MISC/115/09/2024)
+        reference_patterns = [
+            r'(?i)ref\.?\s*[:\-]?\s*[A-Z]+[/\\][A-Z&]+[/\\][A-Z]+[/\\][A-Z]+[/\\]\d+[/\\]\d+[/\\]\d{4}',  # IRDAI/E&C/ORD/MISC/115/09/2024
+            r'(?i)[A-Z]{2,}[/\\][A-Z&]{2,}[/\\][A-Z]{2,}[/\\][A-Z]{2,}[/\\]\d+[/\\]\d+[/\\]\d{4}',       # General pattern
+            r'(?i)[A-Z]{3,}[/\\-][A-Z&/\\-]+[/\\-]\d+[/\\-]\d+[/\\-]\d{4}',                              # Variations with dashes
+            r'(?i)^[A-Z]+[/\\][A-Z&]+.*\d+[/\\]\d+[/\\]\d{4}
+        ]
         
-        # Decision logic
+        # Decision logic - Skip reference patterns
         should_include = False
         
-        # Always include section headers
-        if is_section_header:
+        # Skip if it's a reference pattern
+        if is_reference_pattern:
+            should_include = False
+        
+        # Always include section headers (unless they're reference patterns)
+        elif is_section_header:
             should_include = True
         
         # Include if has sufficient English content
