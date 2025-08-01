@@ -42,20 +42,42 @@ def detect_english_sentences(text):
     """
     Extract English sentences and numeric content from the given text
     """
-    # Split text into sentences using multiple delimiters
-    # This regex splits on periods, exclamation marks, question marks, and newlines
-    # while trying to preserve sentence structure
-    sentence_endings = r'[.!?]+\s*'
+    # Improved splitting that preserves numbered sections and subsections
+    # This regex is more careful about splitting - it won't split on periods that are part of numbering
+    # Pattern explanation:
+    # - Looks for sentence endings (. ! ?) followed by whitespace
+    # - But NOT if preceded by a single digit and period (like "2.1")
+    # - And NOT if followed immediately by a digit (like "2.1")
+    sentence_endings = r'(?<!\d\.)[.!?]+\s+(?!\d)'
+    
+    # Also split on double newlines to separate paragraphs/sections
+    text = re.sub(r'\n\s*\n', ' PARAGRAPH_BREAK ', text)
+    
     potential_sentences = re.split(sentence_endings, text)
+    
+    # Further split on paragraph breaks
+    expanded_sentences = []
+    for sentence in potential_sentences:
+        if 'PARAGRAPH_BREAK' in sentence:
+            parts = sentence.split('PARAGRAPH_BREAK')
+            expanded_sentences.extend([part.strip() for part in parts if part.strip()])
+        else:
+            expanded_sentences.append(sentence)
+    
+    potential_sentences = expanded_sentences
     
     english_sentences = []
     
     for sentence in potential_sentences:
         sentence = sentence.strip()
         
-        # Skip very short sentences (likely fragments)
-        if len(sentence) < 10:
+        # Skip very short sentences (likely fragments) unless they contain section numbers
+        if len(sentence) < 5:
             continue
+        
+        # Special handling for section/subsection headers (like "2.1", "Background 2.1.")
+        section_pattern = r'^\d+\.?\d*\.?\s*[A-Za-z]|^[A-Za-z][^.]*\d+\.?\d*'
+        is_section_header = re.match(section_pattern, sentence)
         
         # Check if sentence contains meaningful English content OR significant numeric content
         english_chars = len(re.findall(r'[a-zA-Z]', sentence))
@@ -63,9 +85,14 @@ def detect_english_sentences(text):
         total_meaningful_chars = english_chars + numeric_chars
         total_chars = len(re.sub(r'\s', '', sentence))
         
-        # Modified condition: Accept if has English letters OR significant numbers
-        has_enough_english = english_chars >= 5
-        has_significant_numbers = numeric_chars >= 3  # At least 3 digits
+        # Modified condition: Accept if has English letters OR significant numbers OR is section header
+        has_enough_english = english_chars >= 3  # Reduced for section headers
+        has_significant_numbers = numeric_chars >= 2  # Reduced threshold
+        
+        # Accept section headers even if short
+        if is_section_header:
+            english_sentences.append(sentence)
+            continue
         
         # Skip if neither English nor numeric content is sufficient
         if not (has_enough_english or has_significant_numbers):
