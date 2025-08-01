@@ -3,7 +3,7 @@ import fitz
 from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langdetect import detect, LangDetectError
+from langdetect import detect
 from dotenv import load_dotenv
 from fpdf import FPDF
 from io import BytesIO
@@ -118,7 +118,7 @@ def detect_english_sentences(text):
                 else:
                     should_include = False
                     
-            except LangDetectError:
+            except Exception:
                 # If language detection fails, be more conservative
                 # Only accept if it looks like English patterns
                 if is_english_like(sentence):
@@ -135,7 +135,7 @@ def detect_english_sentences(text):
                     detected_lang = detect(text_part)
                     if detected_lang != "en":
                         should_include = False
-            except LangDetectError:
+            except Exception:
                 if not is_english_like(sentence):
                     should_include = False
         
