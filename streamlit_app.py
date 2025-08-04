@@ -1,5 +1,5 @@
 import streamlit as st
-import fitz # PyMuPDF
+import fitz
 from langchain_openai import AzureChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
