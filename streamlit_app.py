@@ -246,86 +246,82 @@ if uploaded_file:
     
     # Generate PDF instead of DOCX
     def generate_pdf(summary_text):
-        from reportlab.lib.pagesizes import letter, A4
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
-        
-        buffer = BytesIO()
-        
-        # Create the PDF document
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=A4,
-            rightMargin=72,
-            leftMargin=72,
-            topMargin=72,
-            bottomMargin=18
-        )
-        
-        # Get styles and create custom styles
-        styles = getSampleStyleSheet()
-        
-        # Title style
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=18,
-            spaceAfter=30,
-            alignment=TA_CENTER,
-            textColor='black'
-        )
-        
-        # Body style
-        body_style = ParagraphStyle(
-            'CustomBody',
-            parent=styles['Normal'],
-            fontSize=11,
-            spaceAfter=12,
-            alignment=TA_JUSTIFY,
-            leftIndent=0,
-            rightIndent=0
-        )
-        
-        # Heading style for sections
-        heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=styles['Heading2'],
-            fontSize=14,
-            spaceAfter=12,
-            spaceBefore=20,
-            alignment=TA_LEFT,
-            textColor='black'
-        )
-        
-        # Build the document content
-        story = []
-        
-        # Add title
-        story.append(Paragraph("IRDAI Circular Summary", title_style))
-        story.append(Spacer(1, 20))
-        
-        # Process the summary text
-        paragraphs = summary_text.strip().split("\n\n")
-        
-        for para in paragraphs:
-            clean_para = para.strip()
-            if clean_para:
-                # Check if it looks like a heading (short, possibly all caps, ends with colon, etc.)
-                if (len(clean_para) < 100 and 
-                    (clean_para.endswith(':') or 
-                     clean_para.isupper() or 
-                     any(word in clean_para.lower() for word in ['summary', 'overview', 'section', 'chapter']))):
-                    story.append(Paragraph(clean_para, heading_style))
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.lib.enums import TA_LEFT, TA_CENTER
+            from reportlab.lib.utils import simpleSplit
+            
+            buffer = BytesIO()
+            
+            # Create the PDF document
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=A4,
+                rightMargin=72,
+                leftMargin=72,
+                topMargin=72,
+                bottomMargin=72
+            )
+            
+            # Get styles and create custom styles
+            styles = getSampleStyleSheet()
+            
+            # Title style
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                spaceAfter=30,
+                alignment=TA_CENTER,
+                textColor='black'
+            )
+            
+            # Preformatted style that preserves exact formatting
+            preformatted_style = ParagraphStyle(
+                'Preformatted',
+                parent=styles['Normal'],
+                fontSize=10,
+                leading=12,  # Line spacing
+                spaceAfter=0,
+                spaceBefore=0,
+                alignment=TA_LEFT,
+                leftIndent=0,
+                rightIndent=0,
+                fontName='Courier',  # Monospace font to preserve spacing
+                wordWrap='LTR'
+            )
+            
+            # Build the document content
+            story = []
+            
+            # Add title
+            story.append(Paragraph("IRDAI Circular Summary", title_style))
+            story.append(Spacer(1, 20))
+            
+            # Split the text into lines and preserve each line exactly
+            lines = summary_text.split('\n')
+            
+            for line in lines:
+                # Escape HTML characters to prevent ReportLab from interpreting them
+                escaped_line = (line.replace('&', '&amp;')
+                              .replace('<', '&lt;')
+                              .replace('>', '&gt;')
+                              .replace('"', '&quot;'))
+                
+                # Add each line as a separate paragraph to preserve line breaks
+                if escaped_line.strip():
+                    story.append(Paragraph(escaped_line, preformatted_style))
                 else:
-                    # Regular paragraph
-                    story.append(Paragraph(clean_para, body_style))
-        
-        # Build the PDF
-        doc.build(story)
-        buffer.seek(0)
-        return buffer
+                    # Add a small spacer for empty lines
+                    story.append(Spacer(1, 6))
+            
+            # Build the PDF
+            doc.build(story)
+            buffer.seek(0)
+            return buffer
     
     # Download button for PDF
     try:
