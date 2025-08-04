@@ -324,22 +324,22 @@ if uploaded_file:
             return buffer
     
     # Download button for PDF
-    try:
-        pdf_file = generate_pdf(full_summary)
-        st.download_button(
-            label="Download Summary as PDF",
-            data=pdf_file,
-            file_name="irdai_summary.pdf",
-            mime="application/pdf"
-        )
-    except ImportError:
-        st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
-    except Exception as e:
-        st.error(f"Error generating PDF: {str(e)}")
-        # Fallback to text file
-        st.download_button(
-            label="Download Summary as Text File",
-            data=full_summary,
-            file_name="irdai_summary.txt",
-            mime="text/plain"
-        )
+        try:
+            pdf_file = generate_pdf(full_summary)
+            st.download_button(
+                label="Download Summary as PDF",
+                data=pdf_file,
+                file_name="irdai_summary.pdf",
+                mime="application/pdf"
+            )
+        except ImportError:
+            st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
+        except Exception as e:
+            st.error(f"Error generating PDF: {str(e)}")
+            # Fallback to text file
+            st.download_button(
+                label="Download Summary as Text File",
+                data=full_summary,
+                file_name="irdai_summary.txt",
+                mime="text/plain"
+            )
