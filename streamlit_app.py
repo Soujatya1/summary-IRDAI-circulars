@@ -244,7 +244,7 @@ if uploaded_file:
     st.subheader("Section-wise Summary")
     st.text_area("Generated Summary:", value=full_summary, height=600)
     
-    # Generate PDF instead of DOCX
+    # Generate PDF with LLM output as-is
     def generate_pdf(summary_text):
         try:
             from reportlab.lib.pagesizes import letter, A4
@@ -252,7 +252,6 @@ if uploaded_file:
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import inch
             from reportlab.lib.enums import TA_LEFT, TA_CENTER
-            from reportlab.lib.utils import simpleSplit
             
             buffer = BytesIO()
             
@@ -322,24 +321,32 @@ if uploaded_file:
             doc.build(story)
             buffer.seek(0)
             return buffer
+            
+        except ImportError:
+            st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
+            return None
+        except Exception as e:
+            st.error(f"PDF generation error: {str(e)}")
+            return None
     
     # Download button for PDF
-        try:
-            pdf_file = generate_pdf(full_summary)
+    try:
+        pdf_file = generate_pdf(full_summary)
+        if pdf_file:
             st.download_button(
                 label="Download Summary as PDF",
                 data=pdf_file,
                 file_name="irdai_summary.pdf",
                 mime="application/pdf"
             )
-        except ImportError:
-            st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
-        except Exception as e:
-            st.error(f"Error generating PDF: {str(e)}")
-            # Fallback to text file
-            st.download_button(
-                label="Download Summary as Text File",
-                data=full_summary,
-                file_name="irdai_summary.txt",
-                mime="text/plain"
-            )
+    except ImportError:
+        st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
+    except Exception as e:
+        st.error(f"Error generating PDF: {str(e)}")
+        # Fallback to text file
+        st.download_button(
+            label="Download Summary as Text File",
+            data=full_summary,
+            file_name="irdai_summary.txt",
+            mime="text/plain"
+        )
