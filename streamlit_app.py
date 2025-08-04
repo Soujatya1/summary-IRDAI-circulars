@@ -244,7 +244,6 @@ if uploaded_file:
     st.subheader("Section-wise Summary")
     st.text_area("Generated Summary:", value=full_summary, height=600)
     
-    # Generate PDF with LLM output as-is
     def generate_pdf(summary_text):
         try:
             from reportlab.lib.pagesizes import letter, A4
@@ -252,6 +251,7 @@ if uploaded_file:
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import inch
             from reportlab.lib.enums import TA_LEFT, TA_CENTER
+            import re
             
             buffer = BytesIO()
             
@@ -278,20 +278,43 @@ if uploaded_file:
                 textColor='black'
             )
             
-            # Preformatted style that preserves exact formatting
+            # Regular preformatted style
             preformatted_style = ParagraphStyle(
                 'Preformatted',
                 parent=styles['Normal'],
                 fontSize=10,
-                leading=12,  # Line spacing
+                leading=12,
                 spaceAfter=0,
                 spaceBefore=0,
                 alignment=TA_LEFT,
                 leftIndent=0,
                 rightIndent=0,
-                fontName='Times-Roman',  # Monospace font to preserve spacing
+                fontName='Times-Roman',
                 wordWrap='LTR'
             )
+            
+            # Bold style for chapter headers
+            chapter_style = ParagraphStyle(
+                'ChapterHeader',
+                parent=styles['Normal'],
+                fontSize=10,
+                leading=12,
+                spaceAfter=0,
+                spaceBefore=0,
+                alignment=TA_LEFT,
+                leftIndent=0,
+                rightIndent=0,
+                fontName='Times-Bold',  # Bold font
+                wordWrap='LTR'
+            )
+            
+            # Function to check if a line is a chapter header
+            def is_chapter_header(line):
+                stripped_line = line.strip()
+                # Check if line starts with "CHAPTER" (case insensitive) and the entire line is uppercase
+                if stripped_line.upper().startswith('CHAPTER') and stripped_line.isupper():
+                    return True
+                return False
             
             # Build the document content
             story = []
@@ -300,7 +323,7 @@ if uploaded_file:
             story.append(Paragraph("IRDAI Circular Summary", title_style))
             story.append(Spacer(1, 20))
             
-            # Split the text into lines and preserve each line exactly
+            # Split the text into lines and process each line
             lines = summary_text.split('\n')
             
             for line in lines:
@@ -310,9 +333,13 @@ if uploaded_file:
                               .replace('>', '&gt;')
                               .replace('"', '&quot;'))
                 
-                # Add each line as a separate paragraph to preserve line breaks
+                # Add each line as a separate paragraph
                 if escaped_line.strip():
-                    story.append(Paragraph(escaped_line, preformatted_style))
+                    # Check if this is a chapter header
+                    if is_chapter_header(line):
+                        story.append(Paragraph(escaped_line, chapter_style))
+                    else:
+                        story.append(Paragraph(escaped_line, preformatted_style))
                 else:
                     # Add a small spacer for empty lines
                     story.append(Spacer(1, 6))
