@@ -244,6 +244,8 @@ if uploaded_file:
     st.subheader("Section-wise Summary")
     st.text_area("Generated Summary:", value=full_summary, height=600)
     
+    # Replace your existing generate_pdf function with this updated version
+
     def generate_pdf(summary_text):
         try:
             from reportlab.lib.pagesizes import letter, A4
@@ -293,9 +295,9 @@ if uploaded_file:
                 wordWrap='LTR'
             )
             
-            # Bold style for chapter headers
-            chapter_style = ParagraphStyle(
-                'ChapterHeader',
+            # Bold style for chapter headers and uppercase lines
+            bold_style = ParagraphStyle(
+                'BoldText',
                 parent=styles['Normal'],
                 fontSize=10,
                 leading=12,
@@ -308,12 +310,19 @@ if uploaded_file:
                 wordWrap='LTR'
             )
             
-            # Function to check if a line is a chapter header
-            def is_chapter_header(line):
+            # Function to check if a line should be bold
+            def should_be_bold(line):
                 stripped_line = line.strip()
-                # Check if line starts with "CHAPTER" (case insensitive) and the entire line is uppercase
-                if stripped_line.upper().startswith('CHAPTER') and stripped_line.isupper():
+                
+                # Condition 1: Line starts with "Chapter" (any case)
+                if stripped_line.lower().startswith('chapter'):
                     return True
+                
+                # Condition 2: All letters in the line are uppercase
+                # Check if line has letters and all letters are uppercase
+                if stripped_line and any(c.isalpha() for c in stripped_line) and stripped_line.isupper():
+                    return True
+                    
                 return False
             
             # Build the document content
@@ -335,9 +344,9 @@ if uploaded_file:
                 
                 # Add each line as a separate paragraph
                 if escaped_line.strip():
-                    # Check if this is a chapter header
-                    if is_chapter_header(line):
-                        story.append(Paragraph(escaped_line, chapter_style))
+                    # Check if this line should be bold
+                    if should_be_bold(line):
+                        story.append(Paragraph(escaped_line, bold_style))
                     else:
                         story.append(Paragraph(escaped_line, preformatted_style))
                 else:
