@@ -357,10 +357,11 @@ if uploaded_file:
     def generate_pdf(summary_text):
         try:
             from reportlab.lib.pagesizes import letter, A4
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import inch
-            from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
+            from reportlab.lib.enums import TA_LEFT, TA_CENTER
+            from reportlab.lib.utils import simpleSplit
             
             buffer = BytesIO()
             
@@ -371,7 +372,7 @@ if uploaded_file:
                 rightMargin=72,
                 leftMargin=72,
                 topMargin=72,
-                bottomMargin=18
+                bottomMargin=72
             )
             
             # Get styles and create custom styles
@@ -381,32 +382,25 @@ if uploaded_file:
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=18,
+                fontSize=16,
                 spaceAfter=30,
                 alignment=TA_CENTER,
                 textColor='black'
             )
             
-            # Body style
-            body_style = ParagraphStyle(
-                'CustomBody',
+            # Preformatted style that preserves exact formatting
+            preformatted_style = ParagraphStyle(
+                'Preformatted',
                 parent=styles['Normal'],
-                fontSize=11,
-                spaceAfter=12,
-                alignment=TA_JUSTIFY,
-                leftIndent=0,
-                rightIndent=0
-            )
-            
-            # Heading style for sections
-            heading_style = ParagraphStyle(
-                'CustomHeading',
-                parent=styles['Heading2'],
-                fontSize=14,
-                spaceAfter=12,
-                spaceBefore=20,
+                fontSize=10,
+                leading=12,  # Line spacing
+                spaceAfter=0,
+                spaceBefore=0,
                 alignment=TA_LEFT,
-                textColor='black'
+                leftIndent=0,
+                rightIndent=0,
+                fontName='Courier',  # Monospace font to preserve spacing
+                wordWrap='LTR'
             )
             
             # Build the document content
@@ -416,34 +410,22 @@ if uploaded_file:
             story.append(Paragraph("IRDAI Circular Summary", title_style))
             story.append(Spacer(1, 20))
             
-            # Process the summary text line by line to preserve structure
+            # Split the text into lines and preserve each line exactly
             lines = summary_text.split('\n')
-            current_para = ""
             
             for line in lines:
-                line = line.strip()
-                if not line:
-                    if current_para:
-                        story.append(Paragraph(current_para, body_style))
-                        current_para = ""
-                    story.append(Spacer(1, 6))
-                elif (line.startswith('Chapter') or 
-                      line.isupper() and len(line) < 100 or
-                      line.endswith(':') and len(line) < 100):
-                    if current_para:
-                        story.append(Paragraph(current_para, body_style))
-                        current_para = ""
-                    story.append(Paragraph(line, heading_style))
+                # Escape HTML characters to prevent ReportLab from interpreting them
+                escaped_line = (line.replace('&', '&amp;')
+                              .replace('<', '&lt;')
+                              .replace('>', '&gt;')
+                              .replace('"', '&quot;'))
+                
+                # Add each line as a separate paragraph to preserve line breaks
+                if escaped_line.strip():
+                    story.append(Paragraph(escaped_line, preformatted_style))
                 else:
-                    if current_para and not line.startswith(('1)', '2)', 'a)', 'b)', 'i)', 'ii)')):
-                        current_para += " " + line
-                    else:
-                        if current_para:
-                            story.append(Paragraph(current_para, body_style))
-                        current_para = line
-            
-            if current_para:
-                story.append(Paragraph(current_para, body_style))
+                    # Add a small spacer for empty lines
+                    story.append(Spacer(1, 6))
             
             # Build the PDF
             doc.build(story)
@@ -452,6 +434,9 @@ if uploaded_file:
             
         except ImportError:
             st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
+            return None
+        except Exception as e:
+            st.error(f"PDF generation error: {str(e)}")
             return None
     
     # Download buttons
