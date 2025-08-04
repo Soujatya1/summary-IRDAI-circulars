@@ -289,7 +289,7 @@ if uploaded_file:
                 alignment=TA_LEFT,
                 leftIndent=0,
                 rightIndent=0,
-                fontName='Courier',  # Monospace font to preserve spacing
+                fontName='Times-Roman',  # Monospace font to preserve spacing
                 wordWrap='LTR'
             )
             
