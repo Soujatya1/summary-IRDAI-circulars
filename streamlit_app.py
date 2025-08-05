@@ -55,20 +55,14 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
 llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
 
 def remove_specific_text_pattern(text):
-    """
-    Remove the specific pattern: "Final Order – In the matter of M/s SBI Life Insurance Co. Ltd."
-    and its reference line "Ref: IRDAI/E&C;/ORD/MISC/115/09/2024"
-    """
-    # Pattern to match the specific text with variations in spacing and punctuation
+
     pattern1 = r"Final\s+Order\s*[–-]\s*In\s+the\s+matter\s+of\s+M/s\s+SBI\s+Life\s+Insurance\s+Co\.\s+Ltd\."
     pattern2 = r"Ref:\s*IRDAI/E&C;/ORD/MISC/115/09/2024"
     
-    # Remove both patterns (case insensitive)
     text = re.sub(pattern1, "", text, flags=re.IGNORECASE)
     text = re.sub(pattern2, "", text, flags=re.IGNORECASE)
     
-    # Clean up any extra whitespace or newlines left behind
-    text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)  # Replace multiple newlines with double newlines
+    text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
     text = text.strip()
     
     return text
@@ -174,7 +168,6 @@ Now begin the **section-wise clause-preserving summary** of the following legal 
 {text}
 """
 
-# Streamlit UI
 st.set_page_config(layout="wide")
 
 uploaded_file = st.file_uploader("Upload an IRDAI Circular PDF", type="pdf")
@@ -206,7 +199,6 @@ if uploaded_file:
                 except:
                     pass
     
-    # Remove the specific text pattern after extracting all English text
     english_text = remove_specific_text_pattern(english_text)
     
     st.success(f"Total pages: {total_page_count} | English paragraphs: {english_text_count}")
@@ -227,7 +219,6 @@ if uploaded_file:
             response = llm(messages)
             full_summary += "\n\n" + response.content.strip()
     
-    # Deduplication logic
     def remove_redundant_blocks(text):
         lines = text.strip().split("\n")
         cleaned = []
@@ -240,11 +231,9 @@ if uploaded_file:
     
     full_summary = remove_redundant_blocks(full_summary)
     
-    # Show summary
     st.subheader("Section-wise Summary")
     st.text_area("Generated Summary:", value=full_summary, height=600)
     
-    # Replace your existing generate_pdf function with this updated version
 
     def generate_pdf(summary_text):
         try:
@@ -257,7 +246,6 @@ if uploaded_file:
             
             buffer = BytesIO()
             
-            # Create the PDF document
             doc = SimpleDocTemplate(
                 buffer,
                 pagesize=A4,
@@ -267,10 +255,8 @@ if uploaded_file:
                 bottomMargin=72
             )
             
-            # Get styles and create custom styles
             styles = getSampleStyleSheet()
             
-            # Title style
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
@@ -280,7 +266,6 @@ if uploaded_file:
                 textColor='black'
             )
             
-            # Regular preformatted style
             preformatted_style = ParagraphStyle(
                 'Preformatted',
                 parent=styles['Normal'],
@@ -295,7 +280,6 @@ if uploaded_file:
                 wordWrap='LTR'
             )
             
-            # Bold style for chapter headers and uppercase lines
             bold_style = ParagraphStyle(
                 'BoldText',
                 parent=styles['Normal'],
@@ -306,54 +290,42 @@ if uploaded_file:
                 alignment=TA_LEFT,
                 leftIndent=0,
                 rightIndent=0,
-                fontName='Times-Bold',  # Bold font
+                fontName='Times-Bold',
                 wordWrap='LTR'
             )
             
-            # Function to check if a line should be bold
             def should_be_bold(line):
                 stripped_line = line.strip()
                 
-                # Condition 1: Line starts with "Chapter" (any case)
                 if stripped_line.lower().startswith('chapter'):
                     return True
                 
-                # Condition 2: All letters in the line are uppercase
-                # Check if line has letters and all letters are uppercase
                 if stripped_line and any(c.isalpha() for c in stripped_line) and stripped_line.isupper():
                     return True
                     
                 return False
             
-            # Build the document content
             story = []
             
-            # Add title
             story.append(Paragraph("IRDAI Circular Summary", title_style))
             story.append(Spacer(1, 20))
             
-            # Split the text into lines and process each line
             lines = summary_text.split('\n')
             
             for line in lines:
-                # Escape HTML characters to prevent ReportLab from interpreting them
                 escaped_line = (line.replace('&', '&amp;')
                               .replace('<', '&lt;')
                               .replace('>', '&gt;')
                               .replace('"', '&quot;'))
                 
-                # Add each line as a separate paragraph
                 if escaped_line.strip():
-                    # Check if this line should be bold
                     if should_be_bold(line):
                         story.append(Paragraph(escaped_line, bold_style))
                     else:
                         story.append(Paragraph(escaped_line, preformatted_style))
                 else:
-                    # Add a small spacer for empty lines
                     story.append(Spacer(1, 6))
             
-            # Build the PDF
             doc.build(story)
             buffer.seek(0)
             return buffer
@@ -365,7 +337,6 @@ if uploaded_file:
             st.error(f"PDF generation error: {str(e)}")
             return None
     
-    # Download button for PDF
     try:
         pdf_file = generate_pdf(full_summary)
         if pdf_file:
@@ -379,7 +350,6 @@ if uploaded_file:
         st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
     except Exception as e:
         st.error(f"Error generating PDF: {str(e)}")
-        # Fallback to text file
         st.download_button(
             label="Download Summary as Text File",
             data=full_summary,
