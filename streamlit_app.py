@@ -69,101 +69,76 @@ def remove_specific_text_pattern(text):
 
 def get_summary_prompt(text):
     return f"""
-You are acting as a **Senior Legal Analyst** and Regulatory Compliance Officer specializing in IRDAI, UIDAI, and eGazette circulars.
- 
-Your task is to generate a **legally precise, clause-preserving, structure-aligned summary** of the in-put regulatory document. Your summary will be reviewed for legal compliance, so accuracy is critical.
+You are an expert legal analyst and summarization specialist.
+You will be given the full content of a legal/regulatory circular.
+Your task is to produce a structured, concise, but meaning-preserving summary that follows these strict rules:
 
-Use clean plain text.
-Do not use Markdown formatting (no **bold**, `code`, or extra spacing).
+1. General Summarization Rules
+The essence and meaning of every section must be preserved exactly — legal words and intent must remain unchanged.
+
+Do not omit or alter important legal/regulatory terms (e.g., "shall", "subject to", "unless", "after", etc.).
+
+Summaries should be shorter than the original but still capture the complete meaning.
+
+Keep chapter and section names as in the original circular.
+
+Maintain the order of sections and subsections exactly as they appear in the source.
+
+2. Definitions
+Definition summaries should be mid-length — not too short to lose meaning, not too long to be redundant.
+
+If a definition starts on one page and continues on the next, do not repeat the “Definitions” heading again.
+Continue under the same section.
+
+3. Handling Subpoints
+If a section has subpoints (a, b, c, d):
+
+You may combine the meaning of a and b into summary point a,
+and c and d into summary point b — only if meaning remains intact.
+
+If a point (e.g., b) has sub-subpoints (1, 2, 3, 4):
+
+Summarize them strictly under the correct parent point.
+
+Example: Point b has subpoints 1, 2, 3, 4.
+→ Summary under b should contain two points: one summarizing 1 and 2, the other summarizing 3 and 4.
+
+If there are 5 subpoints, split grouping accordingly without changing meaning.
+
+4. Special Elements
+Panel Names: Must always be included in the summary.
+
+Tables: Must preserve all rows. No row can be omitted. Summarize only textual descriptions if needed, but keep table data intact.
+
+Miscellaneous Sections: Even if short, must be summarized with original intent preserved.
+
+Regulatory Timelines: Must be explicitly retained in summary (do not shorten to the point of losing exact dates).
+
+5. Exclusions
+Do not include:
+
+Authorized signatories
+
+File names in headers/footers
+
+Page numbers
+
+Decorative lines, symbols, or watermarks
+
+6. Output Formatting
+Keep original section headings (e.g., "Section 1: Definitions", "Chapter III", "Miscellaneous").
+
+For each section:
+
+Write the section title.
+
+Write the summarized content in bullet points or numbered lists matching the original substructure.
+
+Keep tables in tabular format in the summary.
 
 ---
- 
-### LEGAL SUMMARIZATION RULES
- 
-**1. STRUCTURE PRESERVATION (Strict Order):**
-- Retain **original structure**, including:
-  - Section headers, subheaders, and sub-subheaders
-  - Clause numbers (e.g., 3.2.1, a), b), c))
-  - Bullet f-ormats, indentation levels
-- Do not reorder, combine, or rename any sections or sub-sections.
- 
-**2. CLAUSE-BY-CLAUSE SUMMARIZATION (NO MERGING):**
-- **Summarize one clause per bullet/sentence only.**
-- If a clause is broken across lines or pages, **treat it as a single clause**.
-- Do not combine adjacent points even if they seem similar.
- 
-**3. PRESERVE LEGAL PHRASES & CAUSALITY TRIGGERS:**
-- Never skip or simplify phrases like:
-  - **"unless"**, **"until"**, **"after"**, **"shall"**, **"subject to"**, **"provided that"**
-- These are **legally binding conditions** and must be **retained with their meaning intact**.
- 
-**4. DEFINITIONS & EXPLANATORY SECTIONS:**
-- If the section contains **definitions** or cl-assifications:
-  - List each term separately using this structure:  
-    - *Definition: Revival Period* – A policy may be revived within…
-  - **Do not merge multiple definitions** into one block.
- 
-**5. COMMITTEES, PANELS, AUTHORITIES (EXACT NAMES):**
-- Retain **every mention of committees and positions verbatim**.
-- Never shorten or generalize:
-  - "Product Management Committee (PMC)" not "product committee"
-  - "Chief Compliance Officer" not "Compliance Head"
-  - "Member – Life", "Key Management Persons (KMPs)", "Appointed Actuary", etc.
-- Repeat full names every time they appear, even if already mentioned before.
- 
-**6. TABLES – PRESERVE IN FULL:**
-- Summarize **column-by-column**, row-by-row.
-- Do not omit any row (e.g., Discontinuance Charges for all policy years).
-- If summarizing:  
-  - *Table: Discontinuance Charges*  
-    - Year 1: Lower of 2% or ₹3,000  
-    - Year 2: Lower of 1.5% or ₹2,000  
-    …
- 
-**7. NUMERIC LIMITS & ABBREVIATIONS:**
-- Maintain correct expressions like:
-  - Rs. 1,000/- (not "Rs 1000")
-  - "AP or FV, whichever is lower" (do not paraphrase this)
- 
-**8. HISTORICAL & AUTHORITY CLAUSES:**
-- Include all clauses like:
-  - "Repeal and Savings"
-  - "Authority's power to issue clarifications"
-- Do **not skip final sections** even if repetitive.
- 
-**9. SIGNATURE, SEAL, PUBLICATION TEXT – OMIT:**
-- Strictly exclude:
-  - Signature blocks (e.g., "Debasish Panda, Chairperson")
-  - Digital signing metadata ("Digitally signed by Manoj Kumar Verma")
-  - Footer/publication notices ("Uploaded by Dte. of Printing…")
- 
-**10. LINE BREAKS & ORPHAN HANDLING:**
-- Do not treat broken lines (from PDF f-ormatting) as new clauses.
-- Ensure a single sentence broken across lines is still summarized as one thought.
- 
----
- 
-### OUTPUT FORMAT:
-- Use ONLY plain text with NO formatting symbols
-- DO NOT use ANY of these characters: # * ** __ ` ~ [ ] ( ) for formatting
-- DO NOT use markdown headers like ## or ###
-- DO NOT use bold markers like **text** or __text__
-- DO NOT use italic markers like *text* or _text_
-- Use simple dashes (-) or bullet points (•) for lists
-- Preserve order and hierarchy using numbers and letters (1, a, i)
-- Use CAPITAL LETTERS for emphasis instead of bold
-- Use line breaks and indentation for structure
-- Preserve order and hierarchy (e.g., 1 → a → i).
-- Do not invent or rename headings.
- 
----
- 
-### SUMMARY LENGTH RULE:
-- Ensure total summary length is approx. **50% of English content pages**.
- 
----
- 
-Now begin the **section-wise clause-preserving summary** of the following legal document:
+
+Now begin the **section-wise, clause-wise, interpretation-based summarization** of the following legal document:
 --------------------
 {text}
 """
