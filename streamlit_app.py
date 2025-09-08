@@ -67,7 +67,7 @@ def remove_specific_text_pattern(text):
     
     return text
 
-def get_summary_prompt(text):
+def get_summary_prompt(text, page_count):
     return f"""
 You are an expert legal analyst and summarization specialist.
 You will be given the full content of a legal/regulatory circular.
