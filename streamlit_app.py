@@ -312,26 +312,28 @@ if uploaded_file:
             
             def markdown_to_reportlab(text):
                 """Convert markdown formatting to ReportLab XML"""
-                # Bold and italic: ***text***
+                # First escape special characters BEFORE adding tags
+                text = (text.replace('&', '&amp;')
+                           .replace('<', '&lt;')
+                           .replace('>', '&gt;')
+                           .replace('"', '&quot;'))
+                
+                # Now convert markdown to XML tags
+                # Bold and italic: ***text*** - do this FIRST
                 text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
                 # Bold: **text**
                 text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
                 # Italic: *text*
                 text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
                 
-                # Escape special characters
-                text = (text.replace('&', '&amp;')
-                           .replace('<b>', '|BOLD|')
-                           .replace('</b>', '|/BOLD|')
-                           .replace('<i>', '|ITALIC|')
-                           .replace('</i>', '|/ITALIC|')
-                           .replace('<', '&lt;')
-                           .replace('>', '&gt;')
-                           .replace('|BOLD|', '<b>')
-                           .replace('|/BOLD|', '</b>')
-                           .replace('|ITALIC|', '<i>')
-                           .replace('|/ITALIC|', '</i>')
-                           .replace('"', '&quot;'))
+                # Clean up any malformed or empty tags
+                text = re.sub(r'<b>\s*<b>', '<b>', text)  # Remove duplicate opening tags
+                text = re.sub(r'</b>\s*</b>', '</b>', text)  # Remove duplicate closing tags
+                text = re.sub(r'<i>\s*<i>', '<i>', text)
+                text = re.sub(r'</i>\s*</i>', '</i>', text)
+                text = re.sub(r'<b>\s*</b>', '', text)  # Remove empty bold tags
+                text = re.sub(r'<i>\s*</i>', '', text)  # Remove empty italic tags
+                text = re.sub(r'<b><i>\s*</i></b>', '', text)  # Remove empty bold-italic tags
                 
                 return text
             
