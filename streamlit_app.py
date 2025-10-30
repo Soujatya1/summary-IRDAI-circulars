@@ -55,7 +55,6 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
 llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
 
 def remove_specific_text_pattern(text):
-
     pattern1 = r"Final\s+Order\s*[–-]\s*In\s+the\s+matter\s+of\s+M/s\s+SBI\s+Life\s+Insurance\s+Co\.\s+Ltd\."
     pattern2 = r"Ref:\s*IRDAI/E&C;/ORD/MISC/115/09/2024"
     
@@ -67,10 +66,79 @@ def remove_specific_text_pattern(text):
     
     return text
 
+def extract_text_with_formatting(pdf_document):
+    """Extract text with formatting information from PDF"""
+    formatted_content = []
+    
+    for page_num, page in enumerate(pdf_document):
+        blocks = page.get_text("dict")["blocks"]
+        
+        for block in blocks:
+            if "lines" not in block:
+                continue
+                
+            for line in block["lines"]:
+                line_text = ""
+                line_formats = []
+                
+                for span in line["spans"]:
+                    text = span["text"]
+                    font_flags = span["flags"]
+                    font_size = span["size"]
+                    
+                    # Detect formatting
+                    is_bold = font_flags & 2**4  # Bold flag
+                    is_italic = font_flags & 2**1  # Italic flag
+                    
+                    # Store text with its formatting
+                    line_formats.append({
+                        "text": text,
+                        "bold": bool(is_bold),
+                        "italic": bool(is_italic),
+                        "size": font_size
+                    })
+                    line_text += text
+                
+                if line_text.strip():
+                    formatted_content.append({
+                        "text": line_text.strip(),
+                        "formats": line_formats,
+                        "page": page_num
+                    })
+    
+    return formatted_content
+
+def format_to_markdown(formatted_content):
+    """Convert formatting info to markdown for LLM processing"""
+    markdown_text = ""
+    
+    for item in formatted_content:
+        line_md = ""
+        for span in item["formats"]:
+            text = span["text"]
+            if span["bold"] and span["italic"]:
+                text = f"***{text}***"
+            elif span["bold"]:
+                text = f"**{text}**"
+            elif span["italic"]:
+                text = f"*{text}*"
+            line_md += text
+        
+        markdown_text += line_md + "\n"
+    
+    return markdown_text
+
 def get_summary_prompt(text):
     return f"""
 You are an expert legal analyst and summarization specialist.
-You will be given the full content of a legal/regulatory circular.
+You will be given the full content of a legal/regulatory circular WITH FORMATTING MARKUP.
+
+**CRITICAL FORMATTING RULE**: The input text contains markdown formatting (**bold**, *italic*, ***bold-italic***).
+YOU MUST PRESERVE THIS FORMATTING IN YOUR SUMMARY. When summarizing:
+- Keep **bold** text as **bold** in the summary
+- Keep *italic* text as *italic* in the summary
+- Keep ***bold-italic*** text as ***bold-italic*** in the summary
+
 Your task is to produce a structured, concise, but meaning-preserving summary that follows these strict rules:
 
 1. General Summarization Rules
@@ -80,14 +148,14 @@ Do not omit or alter important legal/regulatory terms (e.g., "shall", "subject t
 
 Summaries should be shorter than the original but still capture the complete meaning.
 
-Keep chapter and section names as in the original circular.
+Keep chapter and section names as in the original circular WITH THEIR ORIGINAL FORMATTING.
 
 Maintain the order of sections and subsections exactly as they appear in the source.
 
 2. Definitions
 Definition summaries should be mid-length — not too short to lose meaning, not too long to be redundant.
 
-If a definition starts on one page and continues on the next, do not repeat the “Definitions” heading again.
+If a definition starts on one page and continues on the next, do not repeat the "Definitions" heading again.
 Continue under the same section.
 
 3. Handling Subpoints
@@ -126,13 +194,15 @@ Page numbers
 Decorative lines, symbols, or watermarks
 
 6. Output Formatting
-Keep original section headings (e.g., "Section 1: Definitions", "Chapter III", "Miscellaneous").
+Keep original section headings WITH THEIR FORMATTING (e.g., "**Section 1: Definitions**", "**Chapter III**", "Miscellaneous").
 
 For each section:
 
-Write the section title.
+Write the section title WITH FORMATTING.
 
 Write the summarized content in bullet points or numbered lists matching the original substructure.
+
+PRESERVE markdown formatting (**bold**, *italic*, ***bold-italic***) throughout.
 
 Keep tables in tabular format in the summary.
 
@@ -153,42 +223,34 @@ if uploaded_file:
         st.stop()
     
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-    english_text = ""
-    print(english_text)
-    english_text_count = 0
-    total_page_count = len(doc)
     
-    for page in doc:
-        page_text = page.get_text().strip()
-        print(page_text)
-        if page_text:
-            text_lines = [line.strip() for line in page_text.split('\n') if line.strip()]
-            for text_line in text_lines:
-                if len(text_line.split()) < 1:
-                    continue
-                try:
-                    lang = detect(text_line)
-                    if lang == "en":
-                        english_text += "\n\n" + text_line
-                        english_text_count += 1
-                except:
-                    pass
+    # Extract text with formatting
+    formatted_content = extract_text_with_formatting(doc)
     
-    english_text = remove_specific_text_pattern(english_text)
+    # Filter English content
+    english_formatted_content = []
+    for item in formatted_content:
+        try:
+            lang = detect(item["text"])
+            if lang == "en":
+                english_formatted_content.append(item)
+        except:
+            pass
     
-    st.success(f"Total pages: {total_page_count} | English paragraphs: {english_text_count}")
+    # Convert to markdown
+    markdown_text = format_to_markdown(english_formatted_content)
+    markdown_text = remove_specific_text_pattern(markdown_text)
+    
+    st.success(f"Total pages: {len(doc)} | English paragraphs: {len(english_formatted_content)}")
     
     splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
-    chunks = splitter.split_text(english_text)
-    print(chunks)
-    
-    #st.info(f"Summarizing {english_page_count} English paragraphs across {len(chunks)} chunks...")
+    chunks = splitter.split_text(markdown_text)
     
     full_summary = ""
     for i, chunk in enumerate(chunks):
         with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
             messages = [
-                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly."),
+                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING."),
                 HumanMessage(content=get_summary_prompt(chunk))
             ]
             response = llm(messages)
@@ -207,15 +269,13 @@ if uploaded_file:
     full_summary = remove_redundant_blocks(full_summary)
     
     st.subheader("Section-wise Summary")
-    st.text_area("Generated Summary:", value=full_summary, height=600)
+    st.markdown(full_summary)  # Use markdown to display formatted text
     
-
-    def generate_pdf(summary_text):
+    def generate_pdf_with_formatting(summary_text):
         try:
-            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib.pagesizes import A4
             from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.units import inch
             from reportlab.lib.enums import TA_LEFT, TA_CENTER
             import re
             
@@ -241,44 +301,39 @@ if uploaded_file:
                 textColor='black'
             )
             
-            preformatted_style = ParagraphStyle(
-                'Preformatted',
+            normal_style = ParagraphStyle(
+                'Normal',
                 parent=styles['Normal'],
                 fontSize=10,
-                leading=12,
-                spaceAfter=0,
-                spaceBefore=0,
+                leading=14,
+                spaceAfter=6,
                 alignment=TA_LEFT,
-                leftIndent=0,
-                rightIndent=0,
-                fontName='Times-Roman',
-                wordWrap='LTR'
             )
             
-            bold_style = ParagraphStyle(
-                'BoldText',
-                parent=styles['Normal'],
-                fontSize=10,
-                leading=12,
-                spaceAfter=0,
-                spaceBefore=0,
-                alignment=TA_LEFT,
-                leftIndent=0,
-                rightIndent=0,
-                fontName='Times-Bold',
-                wordWrap='LTR'
-            )
-            
-            def should_be_bold(line):
-                stripped_line = line.strip()
+            def markdown_to_reportlab(text):
+                """Convert markdown formatting to ReportLab XML"""
+                # Bold and italic: ***text***
+                text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
+                # Bold: **text**
+                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+                # Italic: *text*
+                text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
                 
-                if stripped_line.lower().startswith('chapter'):
-                    return True
+                # Escape special characters
+                text = (text.replace('&', '&amp;')
+                           .replace('<b>', '|BOLD|')
+                           .replace('</b>', '|/BOLD|')
+                           .replace('<i>', '|ITALIC|')
+                           .replace('</i>', '|/ITALIC|')
+                           .replace('<', '&lt;')
+                           .replace('>', '&gt;')
+                           .replace('|BOLD|', '<b>')
+                           .replace('|/BOLD|', '</b>')
+                           .replace('|ITALIC|', '<i>')
+                           .replace('|/ITALIC|', '</i>')
+                           .replace('"', '&quot;'))
                 
-                if stripped_line and any(c.isalpha() for c in stripped_line) and stripped_line.isupper():
-                    return True
-                    
-                return False
+                return text
             
             story = []
             
@@ -288,16 +343,9 @@ if uploaded_file:
             lines = summary_text.split('\n')
             
             for line in lines:
-                escaped_line = (line.replace('&', '&amp;')
-                              .replace('<', '&lt;')
-                              .replace('>', '&gt;')
-                              .replace('"', '&quot;'))
-                
-                if escaped_line.strip():
-                    if should_be_bold(line):
-                        story.append(Paragraph(escaped_line, bold_style))
-                    else:
-                        story.append(Paragraph(escaped_line, preformatted_style))
+                if line.strip():
+                    formatted_line = markdown_to_reportlab(line)
+                    story.append(Paragraph(formatted_line, normal_style))
                 else:
                     story.append(Spacer(1, 6))
             
@@ -313,7 +361,7 @@ if uploaded_file:
             return None
     
     try:
-        pdf_file = generate_pdf(full_summary)
+        pdf_file = generate_pdf_with_formatting(full_summary)
         if pdf_file:
             st.download_button(
                 label="Download Summary as PDF",
