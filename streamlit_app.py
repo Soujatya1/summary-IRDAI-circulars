@@ -1,4 +1,3 @@
-
 import streamlit as st
 import fitz
 from langchain_openai import AzureChatOpenAI
@@ -68,7 +67,7 @@ def remove_specific_text_pattern(text):
     return text
 
 def extract_text_with_formatting(pdf_document):
-    """Extract text with formatting information from PDF"""
+    """Extract text with formatting information from PDF, preserving structure"""
     formatted_content = []
     
     for page_num, page in enumerate(pdf_document):
@@ -77,7 +76,10 @@ def extract_text_with_formatting(pdf_document):
         for block in blocks:
             if "lines" not in block:
                 continue
-                
+            
+            block_text = ""
+            block_formats = []
+            
             for line in block["lines"]:
                 line_text = ""
                 line_formats = []
@@ -101,33 +103,58 @@ def extract_text_with_formatting(pdf_document):
                     line_text += text
                 
                 if line_text.strip():
-                    formatted_content.append({
-                        "text": line_text.strip(),
-                        "formats": line_formats,
-                        "page": page_num
-                    })
+                    block_text += line_text
+                    block_formats.extend(line_formats)
+            
+            if block_text.strip():
+                formatted_content.append({
+                    "text": block_text.strip(),
+                    "formats": block_formats,
+                    "page": page_num
+                })
     
     return formatted_content
 
 def format_to_markdown(formatted_content):
-    """Convert formatting info to markdown for LLM processing"""
-    markdown_text = ""
+    """Convert formatting info to markdown while preserving numbering and structure"""
+    markdown_lines = []
     
     for item in formatted_content:
-        line_md = ""
-        for span in item["formats"]:
-            text = span["text"]
-            if span["bold"] and span["italic"]:
-                text = f"***{text}***"
-            elif span["bold"]:
-                text = f"**{text}**"
-            elif span["italic"]:
-                text = f"*{text}*"
-            line_md += text
+        line_text = item["text"]
         
-        markdown_text += line_md + "\n"
+        # Check if this line looks like a numbered/bulleted item
+        # Preserve these exactly as they are
+        is_structured = re.match(r'^\s*(\d+\.|\d+\.\d+\.?|\([a-z]\)|\([ivxlcdm]+\)|[a-z]\)|[•\-\*])\s', line_text)
+        
+        if is_structured:
+            # For structured content, preserve the original text but still apply formatting
+            line_md = ""
+            current_pos = 0
+            for span in item["formats"]:
+                text = span["text"]
+                if span["bold"] and span["italic"]:
+                    text = f"***{text}***"
+                elif span["bold"]:
+                    text = f"**{text}**"
+                elif span["italic"]:
+                    text = f"*{text}*"
+                line_md += text
+            markdown_lines.append(line_md)
+        else:
+            # For unstructured content, apply formatting normally
+            line_md = ""
+            for span in item["formats"]:
+                text = span["text"]
+                if span["bold"] and span["italic"]:
+                    text = f"***{text}***"
+                elif span["bold"]:
+                    text = f"**{text}**"
+                elif span["italic"]:
+                    text = f"*{text}*"
+                line_md += text
+            markdown_lines.append(line_md)
     
-    return markdown_text
+    return "\n".join(markdown_lines)
 
 def get_summary_prompt(text):
     return f"""
@@ -140,6 +167,14 @@ YOU MUST PRESERVE THIS FORMATTING IN YOUR SUMMARY. When summarizing:
 - Keep *italic* text as *italic* in the summary
 - Keep ***bold-italic*** text as ***bold-italic*** in the summary
 
+**CRITICAL NUMBERING RULE**: The input text contains numbered sections (1., 2., 1.1, 1.2, (a), (b), etc.).
+YOU MUST PRESERVE THE EXACT NUMBERING SCHEME from the original document. 
+- If the original uses "1.", "2.", "3." - use the same in summary
+- If the original uses "1.1", "1.2" - use the same in summary
+- If the original uses "(a)", "(b)" - use the same in summary
+- DO NOT convert numbering to markdown headers (##, ###)
+- DO NOT change the numbering scheme
+
 Your task is to produce a structured, concise, but meaning-preserving summary that follows these strict rules:
 
 1. General Summarization Rules
@@ -149,7 +184,7 @@ Do not omit or alter important legal/regulatory terms (e.g., "shall", "subject t
 
 Summaries should be shorter than the original but still capture the complete meaning.
 
-Keep chapter and section names as in the original circular WITH THEIR ORIGINAL FORMATTING.
+Keep chapter and section names as in the original circular WITH THEIR ORIGINAL FORMATTING AND NUMBERING.
 
 Maintain the order of sections and subsections exactly as they appear in the source.
 
@@ -160,13 +195,13 @@ If a definition starts on one page and continues on the next, do not repeat the 
 Continue under the same section.
 
 3. Handling Subpoints
-If a section has subpoints (a, b, c, d):
+PRESERVE THE EXACT NUMBERING SCHEME from the original (1., 2., (a), (b), 1.1, 1.2, etc.)
 
+If a section has subpoints (a, b, c, d):
 You may combine the meaning of a and b into summary point a,
 and c and d into summary point b — only if meaning remains intact.
 
 If a point (e.g., b) has sub-subpoints (1, 2, 3, 4):
-
 Summarize them strictly under the correct parent point.
 
 Example: Point b has subpoints 1, 2, 3, 4.
@@ -185,25 +220,20 @@ Regulatory Timelines: Must be explicitly retained in summary (do not shorten to 
 
 5. Exclusions
 Do not include:
-
 Authorized signatories
-
 File names in headers/footers
-
 Page numbers
-
 Decorative lines, symbols, or watermarks
 
 6. Output Formatting
-Keep original section headings WITH THEIR FORMATTING (e.g., "**Section 1: Definitions**", "**Chapter III**", "Miscellaneous").
+Keep original section headings WITH THEIR FORMATTING AND NUMBERING (e.g., "**1. Definitions**", "**2.1 Scope**").
 
 For each section:
-
-Write the section title WITH FORMATTING.
-
-Write the summarized content in bullet points or numbered lists matching the original substructure.
+Write the section title WITH FORMATTING AND ORIGINAL NUMBERING.
+Write the summarized content preserving the original numbering scheme.
 
 PRESERVE markdown formatting (**bold**, *italic*, ***bold-italic***) throughout.
+PRESERVE original numbering (1., 2., (a), (b), 1.1, 1.2, etc.) throughout.
 
 Keep tables in tabular format in the summary.
 
@@ -251,7 +281,7 @@ if uploaded_file:
     for i, chunk in enumerate(chunks):
         with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
             messages = [
-                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING."),
+                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING AND ORIGINAL NUMBERING SCHEMES."),
                 HumanMessage(content=get_summary_prompt(chunk))
             ]
             response = llm.invoke(messages)
@@ -270,7 +300,7 @@ if uploaded_file:
     full_summary = remove_redundant_blocks(full_summary)
     
     st.subheader("Section-wise Summary")
-    st.markdown(full_summary)  # Use markdown to display formatted text
+    st.markdown(full_summary)
     
     def generate_pdf_with_formatting(summary_text):
         try:
@@ -320,43 +350,29 @@ if uploaded_file:
                            .replace('"', '&quot;'))
                 
                 # Clean up malformed markdown first
-                # Remove stray asterisks and fix common issues
-                text = re.sub(r'\*{4,}', '***', text)  # Reduce 4+ asterisks to 3
-                text = re.sub(r'(?<!\*)\*(?!\*)', '', text)  # Remove single asterisks not part of pairs
+                text = re.sub(r'\*{4,}', '***', text)
+                text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
                 
-                # Now convert markdown to XML tags in order
-                # Bold and italic: ***text*** - do this FIRST
+                # Convert markdown to XML tags
                 text = re.sub(r'\*\*\*([^\*]+?)\*\*\*', r'<b><i>\1</i></b>', text)
-                # Bold: **text**
                 text = re.sub(r'\*\*([^\*]+?)\*\*', r'<b>\1</b>', text)
-                # Italic: *text* (rare at this point)
                 text = re.sub(r'\*([^\*]+?)\*', r'<i>\1</i>', text)
                 
-                # Remove any remaining asterisks
                 text = text.replace('*', '')
                 
-                # Clean up malformed or nested tags
                 def fix_nested_tags(t):
-                    """Fix improperly nested tags"""
-                    # Remove empty tags
                     t = re.sub(r'<b>\s*</b>', '', t)
                     t = re.sub(r'<i>\s*</i>', '', t)
                     t = re.sub(r'<b><i>\s*</i></b>', '', t)
-                    
-                    # Fix duplicate tags
                     t = re.sub(r'<b>(<b>)+', '<b>', t)
                     t = re.sub(r'(</b>)+</b>', '</b>', t)
                     t = re.sub(r'<i>(<i>)+', '<i>', t)
                     t = re.sub(r'(</i>)+</i>', '</i>', t)
-                    
-                    # Fix common nesting issues like <b><i></b></i>
                     t = re.sub(r'<b><i>([^<]*)</b></i>', r'<b><i>\1</i></b>', t)
                     t = re.sub(r'<i><b>([^<]*)</i></b>', r'<b><i>\1</i></b>', t)
-                    
                     return t
                 
                 text = fix_nested_tags(text)
-                
                 return text
             
             story = []
@@ -372,9 +388,8 @@ if uploaded_file:
                     try:
                         story.append(Paragraph(formatted_line, normal_style))
                     except Exception as e:
-                        # If paragraph fails, try without any formatting
                         st.warning(f"Skipping formatting for line due to error: {str(e)[:100]}")
-                        plain_line = re.sub(r'<[^>]+>', '', formatted_line)  # Strip all tags
+                        plain_line = re.sub(r'<[^>]+>', '', formatted_line)
                         story.append(Paragraph(plain_line, normal_style))
                 else:
                     story.append(Spacer(1, 6))
