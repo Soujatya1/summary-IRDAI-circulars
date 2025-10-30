@@ -311,29 +311,50 @@ if uploaded_file:
             )
             
             def markdown_to_reportlab(text):
-                """Convert markdown formatting to ReportLab XML"""
+                """Convert markdown formatting to ReportLab XML with proper validation"""
                 # First escape special characters BEFORE adding tags
                 text = (text.replace('&', '&amp;')
                            .replace('<', '&lt;')
                            .replace('>', '&gt;')
                            .replace('"', '&quot;'))
                 
-                # Now convert markdown to XML tags
-                # Bold and italic: ***text*** - do this FIRST
-                text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
-                # Bold: **text**
-                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-                # Italic: *text*
-                text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+                # Clean up malformed markdown first
+                # Remove stray asterisks and fix common issues
+                text = re.sub(r'\*{4,}', '***', text)  # Reduce 4+ asterisks to 3
+                text = re.sub(r'(?<!\*)\*(?!\*)', '', text)  # Remove single asterisks not part of pairs
                 
-                # Clean up any malformed or empty tags
-                text = re.sub(r'<b>\s*<b>', '<b>', text)  # Remove duplicate opening tags
-                text = re.sub(r'</b>\s*</b>', '</b>', text)  # Remove duplicate closing tags
-                text = re.sub(r'<i>\s*<i>', '<i>', text)
-                text = re.sub(r'</i>\s*</i>', '</i>', text)
-                text = re.sub(r'<b>\s*</b>', '', text)  # Remove empty bold tags
-                text = re.sub(r'<i>\s*</i>', '', text)  # Remove empty italic tags
-                text = re.sub(r'<b><i>\s*</i></b>', '', text)  # Remove empty bold-italic tags
+                # Now convert markdown to XML tags in order
+                # Bold and italic: ***text*** - do this FIRST
+                text = re.sub(r'\*\*\*([^\*]+?)\*\*\*', r'<b><i>\1</i></b>', text)
+                # Bold: **text**
+                text = re.sub(r'\*\*([^\*]+?)\*\*', r'<b>\1</b>', text)
+                # Italic: *text* (rare at this point)
+                text = re.sub(r'\*([^\*]+?)\*', r'<i>\1</i>', text)
+                
+                # Remove any remaining asterisks
+                text = text.replace('*', '')
+                
+                # Clean up malformed or nested tags
+                def fix_nested_tags(t):
+                    """Fix improperly nested tags"""
+                    # Remove empty tags
+                    t = re.sub(r'<b>\s*</b>', '', t)
+                    t = re.sub(r'<i>\s*</i>', '', t)
+                    t = re.sub(r'<b><i>\s*</i></b>', '', t)
+                    
+                    # Fix duplicate tags
+                    t = re.sub(r'<b>(<b>)+', '<b>', t)
+                    t = re.sub(r'(</b>)+</b>', '</b>', t)
+                    t = re.sub(r'<i>(<i>)+', '<i>', t)
+                    t = re.sub(r'(</i>)+</i>', '</i>', t)
+                    
+                    # Fix common nesting issues like <b><i></b></i>
+                    t = re.sub(r'<b><i>([^<]*)</b></i>', r'<b><i>\1</i></b>', t)
+                    t = re.sub(r'<i><b>([^<]*)</i></b>', r'<b><i>\1</i></b>', t)
+                    
+                    return t
+                
+                text = fix_nested_tags(text)
                 
                 return text
             
@@ -347,7 +368,13 @@ if uploaded_file:
             for line in lines:
                 if line.strip():
                     formatted_line = markdown_to_reportlab(line)
-                    story.append(Paragraph(formatted_line, normal_style))
+                    try:
+                        story.append(Paragraph(formatted_line, normal_style))
+                    except Exception as e:
+                        # If paragraph fails, try without any formatting
+                        st.warning(f"Skipping formatting for line due to error: {str(e)[:100]}")
+                        plain_line = re.sub(r'<[^>]+>', '', formatted_line)  # Strip all tags
+                        story.append(Paragraph(plain_line, normal_style))
                 else:
                     story.append(Spacer(1, 6))
             
