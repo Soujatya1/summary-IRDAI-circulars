@@ -253,7 +253,7 @@ if uploaded_file:
                 SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING."),
                 HumanMessage(content=get_summary_prompt(chunk))
             ]
-            response = llm(messages)
+            response = llm.invoke(messages)
             full_summary += "\n\n" + response.content.strip()
     
     def remove_redundant_blocks(text):
