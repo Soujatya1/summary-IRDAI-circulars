@@ -1,3 +1,4 @@
+
 import streamlit as st
 import fitz
 from langchain_openai import AzureChatOpenAI
@@ -76,18 +77,10 @@ def extract_text_with_formatting(pdf_document):
         for block in blocks:
             if "lines" not in block:
                 continue
-            
-            # Get block position for alignment detection
-            block_bbox = block.get("bbox", [0, 0, 0, 0])
-            block_x0 = block_bbox[0]
                 
             for line in block["lines"]:
                 line_text = ""
                 line_formats = []
-                
-                # Get line position
-                line_bbox = line.get("bbox", [0, 0, 0, 0])
-                line_x0 = line_bbox[0]
                 
                 for span in line["spans"]:
                     text = span["text"]
@@ -111,8 +104,7 @@ def extract_text_with_formatting(pdf_document):
                     formatted_content.append({
                         "text": line_text.strip(),
                         "formats": line_formats,
-                        "page": page_num,
-                        "indent": line_x0  # Store indentation for alignment
+                        "page": page_num
                     })
     
     return formatted_content
@@ -121,24 +113,7 @@ def format_to_markdown(formatted_content):
     """Convert formatting info to markdown for LLM processing"""
     markdown_text = ""
     
-    # Calculate indentation levels
-    if formatted_content:
-        indents = [item["indent"] for item in formatted_content]
-        min_indent = min(indents)
-        
-        # Create indent levels (every 20 pixels is roughly one level)
-        indent_threshold = 20
-    
     for item in formatted_content:
-        # Calculate indent level
-        indent_level = 0
-        if formatted_content:
-            indent_diff = item["indent"] - min_indent
-            indent_level = int(indent_diff / indent_threshold)
-        
-        # Add indent markers
-        indent_prefix = "→" * indent_level if indent_level > 0 else ""
-        
         line_md = ""
         for span in item["formats"]:
             text = span["text"]
@@ -150,8 +125,7 @@ def format_to_markdown(formatted_content):
                 text = f"*{text}*"
             line_md += text
         
-        # Preserve numbering patterns (1., a., i., (1), etc.)
-        markdown_text += indent_prefix + line_md + "\n"
+        markdown_text += line_md + "\n"
     
     return markdown_text
 
@@ -160,20 +134,11 @@ def get_summary_prompt(text):
 You are an expert legal analyst and summarization specialist.
 You will be given the full content of a legal/regulatory circular WITH FORMATTING MARKUP.
 
-**CRITICAL FORMATTING RULES**: 
-1. The input text contains markdown formatting (**bold**, *italic*, ***bold-italic***).
-   YOU MUST PRESERVE THIS FORMATTING IN YOUR SUMMARY.
-2. The input contains indent markers (→) that indicate hierarchical structure and indentation levels.
-   YOU MUST PRESERVE THESE INDENT MARKERS in the summary to maintain the same alignment.
-3. The input contains numbering patterns (1., 2., a., b., i., ii., (1), (a), etc.).
-   YOU MUST PRESERVE THE EXACT NUMBERING PATTERN AND STYLE in the summary.
-
-When summarizing:
+**CRITICAL FORMATTING RULE**: The input text contains markdown formatting (**bold**, *italic*, ***bold-italic***).
+YOU MUST PRESERVE THIS FORMATTING IN YOUR SUMMARY. When summarizing:
 - Keep **bold** text as **bold** in the summary
 - Keep *italic* text as *italic* in the summary
 - Keep ***bold-italic*** text as ***bold-italic*** in the summary
-- Keep → indent markers at the beginning of lines to preserve indentation
-- Keep numbering patterns exactly as they appear (e.g., if input has "1.", summary should use "1." not "1)")
 
 Your task is to produce a structured, concise, but meaning-preserving summary that follows these strict rules:
 
@@ -184,11 +149,9 @@ Do not omit or alter important legal/regulatory terms (e.g., "shall", "subject t
 
 Summaries should be shorter than the original but still capture the complete meaning.
 
-Keep chapter and section names as in the original circular WITH THEIR ORIGINAL FORMATTING AND INDENTATION.
+Keep chapter and section names as in the original circular WITH THEIR ORIGINAL FORMATTING.
 
 Maintain the order of sections and subsections exactly as they appear in the source.
-
-PRESERVE ALL NUMBERING PATTERNS (1., a., i., (1), etc.) EXACTLY AS THEY APPEAR.
 
 2. Definitions
 Definition summaries should be mid-length — not too short to lose meaning, not too long to be redundant.
@@ -202,11 +165,9 @@ If a section has subpoints (a, b, c, d):
 You may combine the meaning of a and b into summary point a,
 and c and d into summary point b — only if meaning remains intact.
 
-PRESERVE THE ORIGINAL NUMBERING STYLE (if original uses "a.", use "a." not "(a)")
-
 If a point (e.g., b) has sub-subpoints (1, 2, 3, 4):
 
-Summarize them strictly under the correct parent point WITH PROPER INDENTATION (→).
+Summarize them strictly under the correct parent point.
 
 Example: Point b has subpoints 1, 2, 3, 4.
 → Summary under b should contain two points: one summarizing 1 and 2, the other summarizing 3 and 4.
@@ -234,19 +195,15 @@ Page numbers
 Decorative lines, symbols, or watermarks
 
 6. Output Formatting
-Keep original section headings WITH THEIR FORMATTING AND INDENTATION (e.g., "**Section 1: Definitions**", "→**Chapter III**").
+Keep original section headings WITH THEIR FORMATTING (e.g., "**Section 1: Definitions**", "**Chapter III**", "Miscellaneous").
 
 For each section:
 
-Write the section title WITH FORMATTING AND INDENTATION.
+Write the section title WITH FORMATTING.
 
-Write the summarized content matching the original numbering style and indentation level.
+Write the summarized content in bullet points or numbered lists matching the original substructure.
 
 PRESERVE markdown formatting (**bold**, *italic*, ***bold-italic***) throughout.
-
-PRESERVE indent markers (→) for hierarchical structure.
-
-PRESERVE numbering patterns (1., a., i., (1), etc.) exactly.
 
 Keep tables in tabular format in the summary.
 
@@ -354,15 +311,6 @@ if uploaded_file:
                 alignment=TA_LEFT,
             )
             
-            # Styles for different indent levels
-            indent_styles = {}
-            for i in range(10):
-                indent_styles[i] = ParagraphStyle(
-                    f'Indent{i}',
-                    parent=normal_style,
-                    leftIndent=i * 20,  # 20 points per indent level
-                )
-            
             def markdown_to_reportlab(text):
                 """Convert markdown formatting to ReportLab XML with proper validation"""
                 # First escape special characters BEFORE adding tags
@@ -420,23 +368,14 @@ if uploaded_file:
             
             for line in lines:
                 if line.strip():
-                    # Count indent markers (→)
-                    indent_level = line.count('→')
-                    # Remove indent markers from the text
-                    clean_line = line.replace('→', '')
-                    
-                    formatted_line = markdown_to_reportlab(clean_line)
-                    
-                    # Choose appropriate style based on indent level
-                    style = indent_styles.get(indent_level, normal_style)
-                    
+                    formatted_line = markdown_to_reportlab(line)
                     try:
-                        story.append(Paragraph(formatted_line, style))
+                        story.append(Paragraph(formatted_line, normal_style))
                     except Exception as e:
                         # If paragraph fails, try without any formatting
                         st.warning(f"Skipping formatting for line due to error: {str(e)[:100]}")
                         plain_line = re.sub(r'<[^>]+>', '', formatted_line)  # Strip all tags
-                        story.append(Paragraph(plain_line, style))
+                        story.append(Paragraph(plain_line, normal_style))
                 else:
                     story.append(Spacer(1, 6))
             
