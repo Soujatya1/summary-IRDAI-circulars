@@ -1,8 +1,8 @@
 import streamlit as st
 import fitz
 from langchain_openai import AzureChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.messages import HumanMessage, SystemMessage
+from langchain.text_splitters import RecursiveCharacterTextSplitter
 from langdetect import detect
 from dotenv import load_dotenv
 from docx import Document
