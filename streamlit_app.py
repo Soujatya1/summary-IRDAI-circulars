@@ -66,12 +66,56 @@ def remove_specific_text_pattern(text):
     
     return text
 
+def is_likely_header(text, font_size, avg_font_size, is_bold, is_centered=False):
+    """Determine if text is likely a header based on multiple factors"""
+    text_upper = text.strip().upper()
+    text_stripped = text.strip()
+    
+    # Check for common header patterns
+    header_patterns = [
+        r'^CHAPTER[\s-]+[IVX\d]+',
+        r'^PRELIMINARY$',
+        r'^DEFINITIONS$',
+        r'^SCOPE$',
+        r'^[IVX]+\.\s+[A-Z]',
+        r'^\d+\.\s+[A-Z][a-z].*:$',
+    ]
+    
+    is_header_pattern = any(re.match(pattern, text_stripped, re.IGNORECASE) for pattern in header_patterns)
+    
+    # All caps and short (likely a section header)
+    is_all_caps_short = (text_stripped == text_upper and len(text_stripped) < 50 and len(text_stripped) > 2)
+    
+    # Larger font size
+    is_larger_font = font_size > avg_font_size * 1.1
+    
+    # Ends with colon (common for headers)
+    ends_with_colon = text_stripped.endswith(':')
+    
+    return (is_header_pattern or 
+            (is_all_caps_short and (is_bold or is_larger_font or is_centered)) or
+            (is_bold and is_larger_font and len(text_stripped) < 100) or
+            (ends_with_colon and is_bold))
+
 def extract_text_with_formatting(pdf_document):
-    """Extract text with formatting information from PDF, preserving structure"""
+    """Extract text with formatting and structural information from PDF"""
     formatted_content = []
+    
+    # Calculate average font size for header detection
+    all_font_sizes = []
+    for page in pdf_document:
+        blocks = page.get_text("dict")["blocks"]
+        for block in blocks:
+            if "lines" in block:
+                for line in block["lines"]:
+                    for span in line["spans"]:
+                        all_font_sizes.append(span["size"])
+    
+    avg_font_size = sum(all_font_sizes) / len(all_font_sizes) if all_font_sizes else 11
     
     for page_num, page in enumerate(pdf_document):
         blocks = page.get_text("dict")["blocks"]
+        page_width = page.rect.width
         
         for block in blocks:
             if "lines" not in block:
@@ -79,10 +123,16 @@ def extract_text_with_formatting(pdf_document):
             
             block_text = ""
             block_formats = []
+            block_bbox = block.get("bbox", [0, 0, page_width, 0])
+            
+            # Check if block is centered
+            block_center = (block_bbox[0] + block_bbox[2]) / 2
+            is_centered = abs(block_center - page_width / 2) < page_width * 0.1
             
             for line in block["lines"]:
                 line_text = ""
                 line_formats = []
+                line_font_sizes = []
                 
                 for span in line["spans"]:
                     text = span["text"]
@@ -92,6 +142,8 @@ def extract_text_with_formatting(pdf_document):
                     # Detect formatting
                     is_bold = font_flags & 2**4  # Bold flag
                     is_italic = font_flags & 2**1  # Italic flag
+                    
+                    line_font_sizes.append(font_size)
                     
                     # Store text with its formatting
                     line_formats.append({
@@ -107,52 +159,60 @@ def extract_text_with_formatting(pdf_document):
                     block_formats.extend(line_formats)
             
             if block_text.strip():
+                # Determine if this is a header
+                max_font_size = max([f["size"] for f in block_formats]) if block_formats else avg_font_size
+                has_bold = any(f["bold"] for f in block_formats)
+                
+                is_header = is_likely_header(block_text.strip(), max_font_size, avg_font_size, has_bold, is_centered)
+                
                 formatted_content.append({
                     "text": block_text.strip(),
                     "formats": block_formats,
-                    "page": page_num
+                    "page": page_num,
+                    "is_header": is_header,
+                    "is_centered": is_centered,
+                    "max_font_size": max_font_size
                 })
     
     return formatted_content
 
 def format_to_markdown(formatted_content):
-    """Convert formatting info to markdown while preserving numbering and structure"""
+    """Convert formatting info to markdown while preserving structure and headers"""
     markdown_lines = []
     
     for item in formatted_content:
         line_text = item["text"]
+        is_header = item.get("is_header", False)
         
         # Check if this line looks like a numbered/bulleted item
-        # Preserve these exactly as they are
         is_structured = re.match(r'^\s*(\d+\.|\d+\.\d+\.?|\([a-z]\)|\([ivxlcdm]+\)|[a-z]\)|[•\-\*])\s', line_text)
         
-        if is_structured:
-            # For structured content, preserve the original text but still apply formatting
-            line_md = ""
-            current_pos = 0
-            for span in item["formats"]:
-                text = span["text"]
-                if span["bold"] and span["italic"]:
-                    text = f"***{text}***"
-                elif span["bold"]:
-                    text = f"**{text}**"
-                elif span["italic"]:
-                    text = f"*{text}*"
-                line_md += text
-            markdown_lines.append(line_md)
-        else:
-            # For unstructured content, apply formatting normally
-            line_md = ""
-            for span in item["formats"]:
-                text = span["text"]
-                if span["bold"] and span["italic"]:
-                    text = f"***{text}***"
-                elif span["bold"]:
-                    text = f"**{text}**"
-                elif span["italic"]:
-                    text = f"*{text}*"
-                line_md += text
-            markdown_lines.append(line_md)
+        # Special handling for headers
+        if is_header:
+            # Determine header level
+            if re.match(r'^CHAPTER[\s-]+[IVX\d]+', line_text, re.IGNORECASE):
+                markdown_lines.append(f"\n## {line_text}\n")
+            elif line_text.strip().upper() == line_text.strip() and len(line_text.strip()) < 50:
+                # All caps header (like PRELIMINARY, DEFINITIONS)
+                markdown_lines.append(f"\n### {line_text}\n")
+            else:
+                # Other headers - make them bold
+                markdown_lines.append(f"\n**{line_text}**\n")
+            continue
+        
+        # Format the text
+        line_md = ""
+        for span in item["formats"]:
+            text = span["text"]
+            if span["bold"] and span["italic"]:
+                text = f"***{text}***"
+            elif span["bold"]:
+                text = f"**{text}**"
+            elif span["italic"]:
+                text = f"*{text}*"
+            line_md += text
+        
+        markdown_lines.append(line_md)
     
     return "\n".join(markdown_lines)
 
@@ -161,18 +221,24 @@ def get_summary_prompt(text):
 You are an expert legal analyst and summarization specialist.
 You will be given the full content of a legal/regulatory circular WITH FORMATTING MARKUP.
 
-**CRITICAL FORMATTING RULE**: The input text contains markdown formatting (**bold**, *italic*, ***bold-italic***).
+**CRITICAL FORMATTING RULE**: The input text contains markdown formatting (**bold**, *italic*, ***bold-italic***, ## headers, ### subheaders).
 YOU MUST PRESERVE THIS FORMATTING IN YOUR SUMMARY. When summarizing:
 - Keep **bold** text as **bold** in the summary
 - Keep *italic* text as *italic* in the summary
 - Keep ***bold-italic*** text as ***bold-italic*** in the summary
+- Keep ## headers as ## headers
+- Keep ### subheaders as ### subheaders
+
+**CRITICAL STRUCTURE RULE**: Preserve ALL structural elements:
+- Chapter headers (## CHAPTER-I, ## CHAPTER-II, etc.)
+- Section subheaders (### PRELIMINARY, ### DEFINITIONS, etc.)
+- All numbered sections and subsections with their exact numbering
 
 **CRITICAL NUMBERING RULE**: The input text contains numbered sections (1., 2., 1.1, 1.2, (a), (b), etc.).
 YOU MUST PRESERVE THE EXACT NUMBERING SCHEME from the original document. 
 - If the original uses "1.", "2.", "3." - use the same in summary
 - If the original uses "1.1", "1.2" - use the same in summary
 - If the original uses "(a)", "(b)" - use the same in summary
-- DO NOT convert numbering to markdown headers (##, ###)
 - DO NOT change the numbering scheme
 
 Your task is to produce a structured, concise, but meaning-preserving summary that follows these strict rules:
@@ -184,7 +250,7 @@ Do not omit or alter important legal/regulatory terms (e.g., "shall", "subject t
 
 Summaries should be shorter than the original but still capture the complete meaning.
 
-Keep chapter and section names as in the original circular WITH THEIR ORIGINAL FORMATTING AND NUMBERING.
+Keep ALL chapter and section headers exactly as in the original circular WITH THEIR ORIGINAL FORMATTING AND NUMBERING.
 
 Maintain the order of sections and subsections exactly as they appear in the source.
 
@@ -204,11 +270,6 @@ and c and d into summary point b — only if meaning remains intact.
 If a point (e.g., b) has sub-subpoints (1, 2, 3, 4):
 Summarize them strictly under the correct parent point.
 
-Example: Point b has subpoints 1, 2, 3, 4.
-→ Summary under b should contain two points: one summarizing 1 and 2, the other summarizing 3 and 4.
-
-If there are 5 subpoints, split grouping accordingly without changing meaning.
-
 4. Special Elements
 Panel Names: Must always be included in the summary.
 
@@ -216,7 +277,7 @@ Tables: Must preserve all rows. No row can be omitted. Summarize only textual de
 
 Miscellaneous Sections: Even if short, must be summarized with original intent preserved.
 
-Regulatory Timelines: Must be explicitly retained in summary (do not shorten to the point of losing exact dates).
+Regulatory Timelines: Must be explicitly retained in summary.
 
 5. Exclusions
 Do not include:
@@ -226,15 +287,14 @@ Page numbers
 Decorative lines, symbols, or watermarks
 
 6. Output Formatting
-Keep original section headings WITH THEIR FORMATTING AND NUMBERING (e.g., "**1. Definitions**", "**2.1 Scope**").
+Keep ALL original structural elements:
+- ## CHAPTER headers
+- ### Section subheaders
+- **Bold section titles**
+- Original numbering for all points and subpoints
 
-For each section:
-Write the section title WITH FORMATTING AND ORIGINAL NUMBERING.
-Write the summarized content preserving the original numbering scheme.
-
-PRESERVE markdown formatting (**bold**, *italic*, ***bold-italic***) throughout.
-PRESERVE original numbering (1., 2., (a), (b), 1.1, 1.2, etc.) throughout.
-
+PRESERVE markdown formatting throughout.
+PRESERVE original numbering throughout.
 Keep tables in tabular format in the summary.
 
 ---
@@ -258,30 +318,46 @@ if uploaded_file:
     # Extract text with formatting
     formatted_content = extract_text_with_formatting(doc)
     
-    # Filter English content
+    # Filter English content (but be more lenient with short headers)
     english_formatted_content = []
     for item in formatted_content:
         try:
-            lang = detect(item["text"])
-            if lang == "en":
+            text = item["text"]
+            # For short text (like headers), be more lenient
+            if len(text.strip()) < 30 or item.get("is_header", False):
                 english_formatted_content.append(item)
+            else:
+                lang = detect(text)
+                if lang == "en":
+                    english_formatted_content.append(item)
         except:
-            pass
+            # If detection fails, include it anyway (might be a header)
+            if len(item["text"].strip()) < 50:
+                english_formatted_content.append(item)
     
     # Convert to markdown
     markdown_text = format_to_markdown(english_formatted_content)
     markdown_text = remove_specific_text_pattern(markdown_text)
     
-    st.success(f"Total pages: {len(doc)} | English paragraphs: {len(english_formatted_content)}")
+    st.success(f"Total pages: {len(doc)} | Content blocks: {len(english_formatted_content)}")
     
-    splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
+    # Show preview of extracted structure
+    with st.expander("Preview Extracted Structure"):
+        preview_lines = markdown_text.split('\n')[:50]
+        st.code('\n'.join(preview_lines), language='markdown')
+    
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=3500, 
+        chunk_overlap=200,
+        separators=["\n## ", "\n### ", "\n\n", "\n", " ", ""]
+    )
     chunks = splitter.split_text(markdown_text)
     
     full_summary = ""
     for i, chunk in enumerate(chunks):
         with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
             messages = [
-                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING AND ORIGINAL NUMBERING SCHEMES."),
+                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING, HEADERS, AND ORIGINAL NUMBERING SCHEMES."),
                 HumanMessage(content=get_summary_prompt(chunk))
             ]
             response = llm.invoke(messages)
@@ -332,6 +408,26 @@ if uploaded_file:
                 textColor='black'
             )
             
+            h2_style = ParagraphStyle(
+                'Heading2',
+                parent=styles['Heading2'],
+                fontSize=13,
+                spaceAfter=12,
+                spaceBefore=12,
+                alignment=TA_LEFT,
+                textColor='black'
+            )
+            
+            h3_style = ParagraphStyle(
+                'Heading3',
+                parent=styles['Heading3'],
+                fontSize=11,
+                spaceAfter=8,
+                spaceBefore=8,
+                alignment=TA_LEFT,
+                textColor='black'
+            )
+            
             normal_style = ParagraphStyle(
                 'Normal',
                 parent=styles['Normal'],
@@ -342,37 +438,21 @@ if uploaded_file:
             )
             
             def markdown_to_reportlab(text):
-                """Convert markdown formatting to ReportLab XML with proper validation"""
-                # First escape special characters BEFORE adding tags
+                """Convert markdown formatting to ReportLab XML"""
                 text = (text.replace('&', '&amp;')
                            .replace('<', '&lt;')
                            .replace('>', '&gt;')
                            .replace('"', '&quot;'))
                 
-                # Clean up malformed markdown first
                 text = re.sub(r'\*{4,}', '***', text)
                 text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
                 
-                # Convert markdown to XML tags
                 text = re.sub(r'\*\*\*([^\*]+?)\*\*\*', r'<b><i>\1</i></b>', text)
                 text = re.sub(r'\*\*([^\*]+?)\*\*', r'<b>\1</b>', text)
                 text = re.sub(r'\*([^\*]+?)\*', r'<i>\1</i>', text)
                 
                 text = text.replace('*', '')
                 
-                def fix_nested_tags(t):
-                    t = re.sub(r'<b>\s*</b>', '', t)
-                    t = re.sub(r'<i>\s*</i>', '', t)
-                    t = re.sub(r'<b><i>\s*</i></b>', '', t)
-                    t = re.sub(r'<b>(<b>)+', '<b>', t)
-                    t = re.sub(r'(</b>)+</b>', '</b>', t)
-                    t = re.sub(r'<i>(<i>)+', '<i>', t)
-                    t = re.sub(r'(</i>)+</i>', '</i>', t)
-                    t = re.sub(r'<b><i>([^<]*)</b></i>', r'<b><i>\1</i></b>', t)
-                    t = re.sub(r'<i><b>([^<]*)</i></b>', r'<b><i>\1</i></b>', t)
-                    return t
-                
-                text = fix_nested_tags(text)
                 return text
             
             story = []
@@ -383,23 +463,31 @@ if uploaded_file:
             lines = summary_text.split('\n')
             
             for line in lines:
-                if line.strip():
+                if not line.strip():
+                    story.append(Spacer(1, 6))
+                    continue
+                
+                # Check for headers
+                if line.startswith('## '):
+                    header_text = markdown_to_reportlab(line[3:])
+                    story.append(Paragraph(header_text, h2_style))
+                elif line.startswith('### '):
+                    header_text = markdown_to_reportlab(line[4:])
+                    story.append(Paragraph(header_text, h3_style))
+                else:
                     formatted_line = markdown_to_reportlab(line)
                     try:
                         story.append(Paragraph(formatted_line, normal_style))
                     except Exception as e:
-                        st.warning(f"Skipping formatting for line due to error: {str(e)[:100]}")
                         plain_line = re.sub(r'<[^>]+>', '', formatted_line)
                         story.append(Paragraph(plain_line, normal_style))
-                else:
-                    story.append(Spacer(1, 6))
             
             doc.build(story)
             buffer.seek(0)
             return buffer
             
         except ImportError:
-            st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
+            st.error("ReportLab library is required. Install: pip install reportlab")
             return None
         except Exception as e:
             st.error(f"PDF generation error: {str(e)}")
@@ -414,8 +502,6 @@ if uploaded_file:
                 file_name="irdai_summary.pdf",
                 mime="application/pdf"
             )
-    except ImportError:
-        st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
     except Exception as e:
         st.error(f"Error generating PDF: {str(e)}")
         st.download_button(
