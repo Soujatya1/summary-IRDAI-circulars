@@ -273,7 +273,7 @@ if uploaded_file:
     
     st.success(f"Total pages: {len(doc)} | English paragraphs: {len(english_formatted_content)}")
     
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_text(markdown_text)
     
     full_summary = ""
