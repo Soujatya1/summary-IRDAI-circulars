@@ -2,7 +2,7 @@ import streamlit as st
 import fitz
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain.messages import HumanMessage, SystemMessage
-from langchain_experimental.text_splitter import SemanticChunker
+from langchain_text_splitter import SemanticChunker
 from langdetect import detect
 from dotenv import load_dotenv
 from docx import Document
