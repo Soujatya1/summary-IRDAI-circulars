@@ -172,7 +172,7 @@ def format_to_markdown(formatted_content):
                 line_md += text
             markdown_lines.append(line_md)
     
-    return "\n".join(markdown_lines)s)
+    return "\n".join(markdown_lines)
 
 def get_summary_prompt(text):
     return f"""
