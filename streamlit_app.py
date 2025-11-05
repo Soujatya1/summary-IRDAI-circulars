@@ -103,7 +103,7 @@ def extract_text_with_formatting(pdf_document):
                     line_text += text
                 
                 if line_text.strip():
-                    block_text += line_text + " "
+                    block_text += line_text
                     block_formats.extend(line_formats)
             
             if block_text.strip():
@@ -129,6 +129,7 @@ def format_to_markdown(formatted_content):
         if is_structured:
             # For structured content, preserve the original text but still apply formatting
             line_md = ""
+            current_pos = 0
             for span in item["formats"]:
                 text = span["text"]
                 if span["bold"] and span["italic"]:
@@ -273,7 +274,7 @@ if uploaded_file:
     
     st.success(f"Total pages: {len(doc)} | English paragraphs: {len(english_formatted_content)}")
     
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=3500, chunk_overlap=50)
     chunks = splitter.split_text(markdown_text)
     
     full_summary = ""
