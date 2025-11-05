@@ -8,4 +8,4 @@ python-docx
 reportlab
 fpdf
 PyMuPDF
-langchain-experimental
+langchain-text-splitters
