@@ -119,17 +119,35 @@ def format_to_markdown(formatted_content):
     """Convert formatting info to markdown while preserving numbering and structure"""
     markdown_lines = []
     
+    # Calculate average font size to detect headers
+    all_sizes = [span["size"] for item in formatted_content for span in item["formats"]]
+    avg_size = sum(all_sizes) / len(all_sizes) if all_sizes else 12
+    header_threshold = avg_size * 1.2  # Headers are typically 20% larger
+    
     for item in formatted_content:
         line_text = item["text"]
         
+        # Check if this is likely a header based on font size
+        avg_line_size = sum(span["size"] for span in item["formats"]) / len(item["formats"])
+        is_likely_header = avg_line_size > header_threshold
+        
+        # Check if line is all caps (common for headers)
+        is_all_caps = line_text.strip().isupper() and len(line_text.strip()) > 3
+        
         # Check if this line looks like a numbered/bulleted item
-        # Preserve these exactly as they are
         is_structured = re.match(r'^\s*(\d+\.|\d+\.\d+\.?|\([a-z]\)|\([ivxlcdm]+\)|[a-z]\)|[•\-\*])\s', line_text)
         
-        if is_structured:
-            # For structured content, preserve the original text but still apply formatting
+        # Determine if this should be treated as a header
+        if (is_likely_header or is_all_caps) and not is_structured:
+            # Format as header with bold
+            line_md = "**"
+            for span in item["formats"]:
+                line_md += span["text"]
+            line_md += "**"
+            markdown_lines.append(line_md)
+        elif is_structured:
+            # For structured content, preserve formatting
             line_md = ""
-            current_pos = 0
             for span in item["formats"]:
                 text = span["text"]
                 if span["bold"] and span["italic"]:
@@ -141,7 +159,7 @@ def format_to_markdown(formatted_content):
                 line_md += text
             markdown_lines.append(line_md)
         else:
-            # For unstructured content, apply formatting normally
+            # For regular content
             line_md = ""
             for span in item["formats"]:
                 text = span["text"]
@@ -154,7 +172,7 @@ def format_to_markdown(formatted_content):
                 line_md += text
             markdown_lines.append(line_md)
     
-    return "\n".join(markdown_lines)
+    return "\n".join(markdown_lines)s)
 
 def get_summary_prompt(text):
     return f"""
