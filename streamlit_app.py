@@ -1,7 +1,8 @@
 import streamlit as st
 import fitz
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain.messages import HumanMessage, SystemMessage
+from langchain_experimental.text_splitter import SemanticChunker
 from langdetect import detect
 from dotenv import load_dotenv
 from docx import Document
@@ -31,11 +32,54 @@ with st.sidebar:
         help="Name of your deployed model"
     )
     
+    embedding_deployment = st.text_input(
+        "Embedding Deployment Name",
+        placeholder="text-embedding-ada-002",
+        help="Name of your embedding model deployment"
+    )
+    
     api_version = st.selectbox(
         "API Version",
         ["2025-01-01-preview"],
         index=0
     )
+    
+    st.divider()
+    st.subheader("Semantic Chunking Settings")
+    
+    breakpoint_type = st.selectbox(
+        "Breakpoint Type",
+        ["percentile", "standard_deviation", "interquartile"],
+        index=0,
+        help="Method to determine semantic breakpoints"
+    )
+    
+    if breakpoint_type == "percentile":
+        breakpoint_threshold = st.slider(
+            "Percentile Threshold",
+            min_value=50,
+            max_value=99,
+            value=95,
+            help="Higher values create fewer, larger chunks"
+        )
+    elif breakpoint_type == "standard_deviation":
+        breakpoint_threshold = st.slider(
+            "Standard Deviation Threshold",
+            min_value=1.0,
+            max_value=5.0,
+            value=3.0,
+            step=0.5,
+            help="Higher values create fewer, larger chunks"
+        )
+    else:  # interquartile
+        breakpoint_threshold = st.slider(
+            "IQR Multiplier",
+            min_value=1.0,
+            max_value=5.0,
+            value=1.5,
+            step=0.5,
+            help="Higher values create fewer, larger chunks"
+        )
 
 def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
     try:
@@ -51,7 +95,21 @@ def initialize_azure_openai(endpoint, api_key, deployment_name, api_version):
         st.error(f"Error initializing Azure OpenAI: {str(e)}")
         return None
 
+def initialize_embeddings(endpoint, api_key, deployment_name, api_version):
+    try:
+        embeddings = AzureOpenAIEmbeddings(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            azure_deployment=deployment_name,
+            api_version=api_version
+        )
+        return embeddings
+    except Exception as e:
+        st.error(f"Error initializing embeddings: {str(e)}")
+        return None
+
 llm = initialize_azure_openai(azure_endpoint, api_key, deployment_name, api_version)
+embeddings = initialize_embeddings(azure_endpoint, api_key, embedding_deployment, api_version) if embedding_deployment else None
 
 def remove_specific_text_pattern(text):
     pattern1 = r"Final\s+Order\s*[–-]\s*In\s+the\s+matter\s+of\s+M/s\s+SBI\s+Life\s+Insurance\s+Co\.\s+Ltd\."
@@ -64,186 +122,6 @@ def remove_specific_text_pattern(text):
     text = text.strip()
     
     return text
-
-class DynamicChunker:
-    """
-    Intelligent text chunker that splits based on semantic boundaries
-    like sections, headings, and natural paragraph breaks.
-    """
-    
-    def __init__(self, max_chunk_size=3000, min_chunk_size=100, overlap_sentences=2):
-        self.max_chunk_size = max_chunk_size
-        self.min_chunk_size = min_chunk_size
-        self.overlap_sentences = overlap_sentences
-    
-    def is_heading(self, line):
-        """Detect if a line is likely a heading/section marker"""
-        line = line.strip()
-        if not line:
-            return False
-        
-        # Check for numbered sections (1., 1.1, 2.3.4, etc.)
-        if re.match(r'^\*{0,3}\d+(\.\d+)*\.?\*{0,3}\s+\*{0,3}[A-Z]', line):
-            return True
-        
-        # Check for bold headers
-        if re.match(r'^\*\*[A-Z].*\*\*$', line):
-            return True
-        
-        # Check for lettered sections ((a), (i), etc.)
-        if re.match(r'^\*{0,3}\([a-z]|[ivxlcdm]+\)\*{0,3}\s+', line):
-            return True
-        
-        # Check for ALL CAPS headers (but not too long)
-        if line.isupper() and 3 < len(line) < 100:
-            return True
-        
-        return False
-    
-    def get_heading_level(self, line):
-        """Determine the hierarchical level of a heading"""
-        line = line.strip()
-        
-        # Main numbered sections (1., 2., etc.)
-        if re.match(r'^\*{0,3}\d+\.\s+', line):
-            return 1
-        
-        # Subsections (1.1, 2.3, etc.)
-        if re.match(r'^\*{0,3}\d+\.\d+', line):
-            depth = line.split()[0].count('.')
-            return depth
-        
-        # Lettered items
-        if re.match(r'^\*{0,3}\([a-z]\)', line):
-            return 3
-        
-        # Roman numerals
-        if re.match(r'^\*{0,3}\([ivxlcdm]+\)', line):
-            return 4
-        
-        return 2  # Default
-    
-    def split_into_semantic_blocks(self, text):
-        """Split text into semantic blocks based on structure"""
-        lines = text.split('\n')
-        blocks = []
-        current_block = []
-        current_heading = None
-        current_level = 0
-        
-        for i, line in enumerate(lines):
-            line_stripped = line.strip()
-            
-            if not line_stripped:
-                if current_block:
-                    current_block.append(line)
-                continue
-            
-            is_heading_line = self.is_heading(line)
-            
-            if is_heading_line:
-                heading_level = self.get_heading_level(line)
-                
-                # Start new block if:
-                # 1. We have content in current block
-                # 2. New heading is same or higher level (less indented)
-                if current_block and heading_level <= current_level:
-                    blocks.append({
-                        'heading': current_heading,
-                        'content': '\n'.join(current_block),
-                        'level': current_level
-                    })
-                    current_block = []
-                
-                current_heading = line_stripped
-                current_level = heading_level
-                current_block.append(line)
-            else:
-                current_block.append(line)
-        
-        # Add remaining block
-        if current_block:
-            blocks.append({
-                'heading': current_heading,
-                'content': '\n'.join(current_block),
-                'level': current_level
-            })
-        
-        return blocks
-    
-    def get_overlap_text(self, text):
-        """Get last few sentences for overlap"""
-        sentences = re.split(r'[.!?]\s+', text)
-        if len(sentences) <= self.overlap_sentences:
-            return text
-        return '. '.join(sentences[-self.overlap_sentences:]) + '.'
-    
-    def chunk_text(self, text):
-        """Main chunking method that creates intelligent chunks"""
-        blocks = self.split_into_semantic_blocks(text)
-        chunks = []
-        current_chunk = []
-        current_size = 0
-        overlap_text = ""
-        
-        for block in blocks:
-            block_content = block['content']
-            block_size = len(block_content)
-            
-            # If single block exceeds max size, split it by paragraphs
-            if block_size > self.max_chunk_size:
-                # Save current chunk if it exists
-                if current_chunk:
-                    chunk_text = '\n\n'.join(current_chunk)
-                    chunks.append(chunk_text)
-                    overlap_text = self.get_overlap_text(chunk_text)
-                    current_chunk = []
-                    current_size = 0
-                
-                # Split large block by paragraphs
-                paragraphs = [p for p in block_content.split('\n\n') if p.strip()]
-                temp_chunk = [overlap_text] if overlap_text else []
-                temp_size = len(overlap_text)
-                
-                for para in paragraphs:
-                    para_size = len(para)
-                    
-                    if temp_size + para_size > self.max_chunk_size and temp_chunk:
-                        chunk_text = '\n\n'.join(temp_chunk)
-                        chunks.append(chunk_text)
-                        overlap_text = self.get_overlap_text(chunk_text)
-                        temp_chunk = [overlap_text]
-                        temp_size = len(overlap_text)
-                    
-                    temp_chunk.append(para)
-                    temp_size += para_size
-                
-                if temp_chunk:
-                    chunk_text = '\n\n'.join(temp_chunk)
-                    chunks.append(chunk_text)
-                    overlap_text = self.get_overlap_text(chunk_text)
-                
-                continue
-            
-            # Check if adding this block would exceed max size
-            if current_size + block_size > self.max_chunk_size and current_chunk:
-                # Save current chunk
-                chunk_text = '\n\n'.join(current_chunk)
-                chunks.append(chunk_text)
-                overlap_text = self.get_overlap_text(chunk_text)
-                
-                # Start new chunk with overlap
-                current_chunk = [overlap_text] if overlap_text else []
-                current_size = len(overlap_text)
-            
-            current_chunk.append(block_content)
-            current_size += block_size
-        
-        # Add final chunk
-        if current_chunk:
-            chunks.append('\n\n'.join(current_chunk))
-        
-        return chunks
 
 def extract_text_with_formatting(pdf_document):
     """Extract text with formatting information from PDF, preserving structure"""
@@ -443,6 +321,9 @@ Now begin the **section-wise, clause-wise, interpretation-based summarization** 
 
 st.set_page_config(layout="wide")
 
+st.title("📄 IRDAI Circular Semantic Summarizer")
+st.markdown("Uses AI embeddings to create semantically coherent document chunks for better summarization")
+
 uploaded_file = st.file_uploader("Upload an IRDAI Circular PDF", type="pdf")
 
 if uploaded_file:
@@ -450,10 +331,15 @@ if uploaded_file:
         st.error("Cannot process document: Azure OpenAI client not properly configured.")
         st.stop()
     
+    if embeddings is None:
+        st.error("Cannot process document: Embeddings model not properly configured. Please provide an embedding deployment name.")
+        st.stop()
+    
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     
     # Extract text with formatting
-    formatted_content = extract_text_with_formatting(doc)
+    with st.spinner("Extracting text with formatting..."):
+        formatted_content = extract_text_with_formatting(doc)
     
     # Filter English content
     english_formatted_content = []
@@ -471,21 +357,54 @@ if uploaded_file:
     
     st.success(f"Total pages: {len(doc)} | English paragraphs: {len(english_formatted_content)}")
     
-    # Use dynamic chunker instead of RecursiveCharacterTextSplitter
-    chunker = DynamicChunker(max_chunk_size=3000, min_chunk_size=500, overlap_sentences=2)
-    chunks = chunker.chunk_text(markdown_text)
+    # Use Semantic Chunker
+    with st.spinner("Creating semantic chunks using embeddings..."):
+        try:
+            semantic_chunker = SemanticChunker(
+                embeddings,
+                breakpoint_threshold_type=breakpoint_type,
+                breakpoint_threshold_amount=breakpoint_threshold
+            )
+            chunks = semantic_chunker.split_text(markdown_text)
+            
+            st.info(f"✅ Document split into {len(chunks)} semantically coherent chunks")
+            
+            # Show chunk statistics
+            chunk_sizes = [len(chunk) for chunk in chunks]
+            avg_size = sum(chunk_sizes) / len(chunk_sizes) if chunk_sizes else 0
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Chunks", len(chunks))
+            with col2:
+                st.metric("Avg Chunk Size", f"{int(avg_size)} chars")
+            with col3:
+                st.metric("Max Chunk Size", f"{max(chunk_sizes)} chars")
+            
+        except Exception as e:
+            st.error(f"Error during semantic chunking: {str(e)}")
+            st.info("Falling back to simple text splitting...")
+            # Fallback to simple splitting
+            chunks = [markdown_text[i:i+3000] for i in range(0, len(markdown_text), 2900)]
     
-    st.info(f"Document split into {len(chunks)} intelligent chunks based on semantic structure")
-    
+    # Process chunks
     full_summary = ""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
     for i, chunk in enumerate(chunks):
-        with st.spinner(f"Processing chunk {i + 1} of {len(chunks)}..."):
-            messages = [
-                SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING AND ORIGINAL NUMBERING SCHEMES."),
-                HumanMessage(content=get_summary_prompt(chunk))
-            ]
-            response = llm.invoke(messages)
-            full_summary += "\n\n" + response.content.strip()
+        status_text.text(f"Processing chunk {i + 1} of {len(chunks)}...")
+        progress_bar.progress((i + 1) / len(chunks))
+        
+        messages = [
+            SystemMessage(content="You are a professional IRDAI summarizer. Follow all instructions strictly. PRESERVE ALL MARKDOWN FORMATTING AND ORIGINAL NUMBERING SCHEMES."),
+            HumanMessage(content=get_summary_prompt(chunk))
+        ]
+        response = llm.invoke(messages)
+        full_summary += "\n\n" + response.content.strip()
+    
+    status_text.text("✅ Processing complete!")
+    progress_bar.empty()
     
     def remove_redundant_blocks(text):
         lines = text.strip().split("\n")
@@ -499,7 +418,7 @@ if uploaded_file:
     
     full_summary = remove_redundant_blocks(full_summary)
     
-    st.subheader("Section-wise Summary")
+    st.subheader("📋 Section-wise Summary")
     st.markdown(full_summary)
     
     def generate_pdf_with_formatting(summary_text):
@@ -605,22 +524,31 @@ if uploaded_file:
             st.error(f"PDF generation error: {str(e)}")
             return None
     
-    try:
-        pdf_file = generate_pdf_with_formatting(full_summary)
-        if pdf_file:
-            st.download_button(
-                label="Download Summary as PDF",
-                data=pdf_file,
-                file_name="irdai_summary.pdf",
-                mime="application/pdf"
-            )
-    except ImportError:
-        st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
-    except Exception as e:
-        st.error(f"Error generating PDF: {str(e)}")
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        try:
+            pdf_file = generate_pdf_with_formatting(full_summary)
+            if pdf_file:
+                st.download_button(
+                    label="📥 Download Summary as PDF",
+                    data=pdf_file,
+                    file_name="irdai_summary.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+        except ImportError:
+            st.error("ReportLab library is required for PDF generation. Please install it using: pip install reportlab")
+        except Exception as e:
+            st.error(f"Error generating PDF: {str(e)}")
+    
+    with col2:
         st.download_button(
-            label="Download Summary as Text File",
+            label="📄 Download Summary as Text",
             data=full_summary,
             file_name="irdai_summary.txt",
-            mime="text/plain"
+            mime="text/plain",
+            use_container_width=True
         )
