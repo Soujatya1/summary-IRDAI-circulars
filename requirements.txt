@@ -2,7 +2,6 @@ streamlit
 pdfplumber
 langchain-openai
 langchain
-langchain-community
 langdetect
 python-docx
 reportlab
